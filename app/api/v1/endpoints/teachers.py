@@ -34,6 +34,11 @@ async def create_teacher(
         "first_name": teacher.first_name,
         "last_name": teacher.last_name,
         "email": teacher.email,
+        "preferred_location": teacher.preferred_location,
+        "subject_specialty": teacher.subject_specialty,
+        "preferred_age_group": teacher.preferred_age_group,
+        "linkedin": teacher.linkedin,
+        "status": "pending",  # Initial status
     }
 
     response = supabase.table("teachers").insert(teacher_data).execute()
@@ -52,8 +57,13 @@ async def get_current_teacher_profile(
     teacher: dict = Depends(get_current_teacher)
 ):
     """
-    Get current teacher's profile
+    Get current teacher's profile with calculated completeness percentage
     """
+    from app.models.teacher import TeacherResponse
+
+    # Calculate profile completeness
+    teacher["profile_completeness"] = TeacherResponse.calculate_profile_completeness(teacher)
+
     return teacher
 
 
