@@ -4,9 +4,29 @@ from jose import jwt, JWTError
 from app.config import get_settings
 from app.db.supabase import get_supabase_client
 from typing import Optional
+import requests
 
 
 security = HTTPBearer()
+
+
+# Cache for JWKS (JSON Web Key Set)
+_jwks_cache = None
+
+
+def get_jwks(supabase_url: str):
+    """Fetch JWKS from Supabase"""
+    global _jwks_cache
+    if _jwks_cache is None:
+        # Remove trailing slash if present
+        base_url = supabase_url.rstrip('/')
+        jwks_url = f"{base_url}/auth/v1/.well-known/jwks.json"
+        print(f"[JWT] Fetching JWKS from: {jwks_url}")
+        response = requests.get(jwks_url)
+        response.raise_for_status()
+        _jwks_cache = response.json()
+        print(f"[JWT] JWKS fetched successfully: {len(_jwks_cache.get('keys', []))} keys")
+    return _jwks_cache
 
 
 async def get_current_user(
@@ -15,18 +35,34 @@ async def get_current_user(
     """
     Validate JWT token and return user data
     Raises 401 if token is invalid or expired
+    Supports both HS256 (legacy) and ES256 (new) tokens
     """
     settings = get_settings()
     token = credentials.credentials
 
     try:
-        # Decode JWT token
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated"
-        )
+        # First, try to decode with ES256 (new Supabase tokens)
+        try:
+            # Get the JWKS from Supabase
+            jwks = get_jwks(settings.supabase_url)
+
+            # Decode with ES256 using JWKS
+            payload = jwt.decode(
+                token,
+                jwks,
+                algorithms=["ES256"],
+                audience="authenticated",
+                options={"verify_aud": True}
+            )
+        except (JWTError, requests.RequestException) as es256_error:
+            # If ES256 fails, try HS256 (legacy tokens)
+            print(f"[JWT] ES256 validation failed, trying HS256: {es256_error}")
+            payload = jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                audience="authenticated"
+            )
 
         user_id: str = payload.get("sub")
         if user_id is None:
@@ -41,6 +77,8 @@ async def get_current_user(
             "role": payload.get("role"),
         }
     except JWTError as e:
+        print(f"[JWT Validation Error] {type(e).__name__}: {str(e)}")
+        print(f"[JWT Validation Error] Token preview: {token[:50]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

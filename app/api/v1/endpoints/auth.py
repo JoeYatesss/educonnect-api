@@ -9,7 +9,7 @@ router = APIRouter()
 
 
 @router.get("/me")
-@limiter.limit("30/minute")
+@limiter.limit("300/minute")  # Increased for development
 async def get_current_user_profile(
     request: Request,
     current_user: dict = Depends(get_current_user)
