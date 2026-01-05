@@ -1,7 +1,8 @@
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Request
 from pydantic import BaseModel, EmailStr
 from app.db.supabase import get_supabase_client
 from app.services.matching_service import MatchingService
+from app.middleware.rate_limit import limiter
 from typing import Optional
 import logging
 
@@ -24,7 +25,9 @@ class SignupTeacherRequest(BaseModel):
 
 
 @router.post("/create-teacher-profile", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/hour")
 async def create_teacher_profile_signup(
+    request: Request,
     data: SignupTeacherRequest,
     background_tasks: BackgroundTasks
 ):

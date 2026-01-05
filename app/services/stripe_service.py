@@ -34,7 +34,7 @@ class StripeService:
         if not teacher_email:
             raise ValueError("teacher_email is required")
 
-        print(f"[StripeService] Creating checkout session for teacher_id={teacher_id}, email={teacher_email}")
+        # Validate teacher exists
 
         supabase = get_supabase_client()
 
@@ -67,7 +67,6 @@ class StripeService:
 
         # Get Price ID from LocationService
         price_id = LocationService.get_price_id_for_currency(currency)
-        print(f"[StripeService] Using currency: {currency}, price_id: {price_id}")
 
         # Check if teacher already has a Stripe customer ID
         teacher = supabase.table("teachers").select("stripe_customer_id").eq("id", teacher_id).single().execute()
@@ -81,7 +80,6 @@ class StripeService:
                 stripe.Customer.retrieve(customer_id)
             except stripe.error.InvalidRequestError:
                 # Customer doesn't exist, clear the old ID and create new one
-                print(f"[Stripe] Customer {customer_id} not found, creating new customer")
                 customer_id = None
 
         if not customer_id:
@@ -98,8 +96,6 @@ class StripeService:
 
         # Create checkout session
         from datetime import datetime
-        print(f"[StripeService] Creating Stripe checkout session...")
-        print(f"[StripeService] Metadata will include: teacher_id={teacher_id}, teacher_email={teacher_email}")
 
         session = stripe.checkout.Session.create(
             customer=customer_id,
@@ -126,11 +122,6 @@ class StripeService:
         if not created_metadata.get("teacher_id"):
             raise ValueError(f"CRITICAL: Stripe session created without teacher_id in metadata! Session ID: {session.id}")
 
-        print(f"[StripeService] ✅ Checkout session created successfully")
-        print(f"[StripeService] Session ID: {session.id}")
-        print(f"[StripeService] Metadata: {created_metadata}")
-        print(f"[StripeService] URL: {session.url}")
-
         return {
             "session_id": session.id,
             "url": session.url,
@@ -152,13 +143,10 @@ class StripeService:
         Handle successful checkout session
         Update teacher payment status, create payment record, and send confirmation email
         """
-        print(f"[StripeService] Starting handle_checkout_completed")
         supabase = get_supabase_client()
 
         # Enhanced metadata validation with fallback
-        import json
         session_metadata = session.get("metadata", {})
-        print(f"[StripeService] Full session metadata: {json.dumps(session_metadata, indent=2)}")
 
         if not session_metadata:
             raise ValueError("Session has no metadata object")
@@ -170,15 +158,13 @@ class StripeService:
             # Fallback: try to find teacher by email
             teacher_email = session_metadata.get("teacher_email")
             if teacher_email:
-                print(f"[StripeService] No teacher_id, trying email lookup: {teacher_email}")
                 teacher_result = supabase.table("teachers").select("id").eq(
                     "email", teacher_email
                 ).single().execute()
                 if teacher_result.data:
                     teacher_id = teacher_result.data["id"]
-                    print(f"[StripeService] Found teacher via email: {teacher_id}")
                 else:
-                    raise ValueError(f"No teacher found with email: {teacher_email}")
+                    raise ValueError("No teacher found with provided email")
             else:
                 raise ValueError("Session metadata missing both teacher_id and teacher_email")
         else:
@@ -187,10 +173,6 @@ class StripeService:
         payment_intent_id = session["payment_intent"]
         customer_id = session["customer"]
         amount_total = session["amount_total"]
-
-        print(f"[StripeService] Processing payment for teacher_id: {teacher_id}")
-        print(f"[StripeService] Payment intent: {payment_intent_id}")
-        print(f"[StripeService] Amount: {amount_total}")
 
         # Retrieve payment intent to get payment details (expand charges to get receipt)
         # This may fail for test events from 'stripe trigger', so we handle it gracefully
@@ -206,11 +188,10 @@ class StripeService:
             # Get receipt URL from charges
             if hasattr(payment_intent, 'charges') and payment_intent.charges and payment_intent.charges.data:
                 receipt_url = payment_intent.charges.data[0].receipt_url
-                print(f"[StripeService] Receipt URL: {receipt_url}")
-        except stripe.error.InvalidRequestError as e:
+        except stripe.error.InvalidRequestError:
             # This is likely a test event from 'stripe trigger' with a fake payment intent
-            print(f"[StripeService] ⚠️  Could not retrieve payment intent (likely a test event): {str(e)}")
-            print(f"[StripeService] Continuing without receipt URL...")
+            # Continue without receipt URL
+            pass
 
         # Create payment record
         payment_data = {
@@ -231,59 +212,19 @@ class StripeService:
 
         if existing.data:
             # Payment already processed - don't send duplicate email
-            print(f"[StripeService] Payment already exists, skipping duplicate processing")
             return
 
         # Insert payment record
-        print(f"[StripeService] Creating payment record in database")
-        payment_record = supabase.table("payments").insert(payment_data).execute()
-        print(f"[StripeService] Payment record created: {payment_record.data}")
+        supabase.table("payments").insert(payment_data).execute()
 
         # Update teacher payment status
-        print(f"[StripeService] Updating teacher has_paid status to True for teacher_id: {teacher_id}")
-        update_result = supabase.table("teachers").update({
+        supabase.table("teachers").update({
             "has_paid": True,
             "payment_id": payment_intent_id,
             "payment_date": "now()",
         }).eq("id", teacher_id).execute()
-        print(f"[StripeService] Teacher update result: {update_result.data}")
 
-        if update_result.data:
-            print(f"[StripeService] ✓ Successfully updated has_paid=True for teacher {teacher_id}")
-        else:
-            print(f"[StripeService] ✗ WARNING: Teacher update returned no data!")
-
-        # Email sending disabled for test mode (no domain configured)
-        # Uncomment when domain is set up and Resend is configured
-
-        # # Get teacher details for email
-        # teacher = supabase.table("teachers").select(
-        #     "email, first_name, last_name"
-        # ).eq("id", teacher_id).single().execute()
-
-        # if teacher.data:
-        #     teacher_email = teacher.data.get("email")
-        #     first_name = teacher.data.get("first_name", "")
-        #     last_name = teacher.data.get("last_name", "")
-        #     teacher_name = f"{first_name} {last_name}".strip() or "Valued Teacher"
-
-        #     # Send payment confirmation email
-        #     try:
-        #         email_service = EmailService()
-        #         email_service.send_payment_confirmation(
-        #             to_email=teacher_email,
-        #             teacher_name=teacher_name,
-        #             amount=amount_total,  # Amount in cents
-        #             payment_date=payment_record.data[0]["created_at"],
-        #             receipt_url=receipt_url
-        #         )
-        #         print(f"[Email] Payment confirmation sent to {teacher_email}")
-        #     except Exception as email_error:
-        #         # Log error but don't fail the webhook
-        #         # Payment is already processed, email is secondary
-        #         print(f"[Email Error] Failed to send confirmation email: {email_error}")
-
-        print(f"[StripeService] ℹ️  Email sending disabled (test mode, no domain configured)")
+        # TODO: Add email notification when domain is configured
 
     @staticmethod
     def get_payment_by_teacher(teacher_id: int) -> Optional[dict]:
@@ -314,7 +255,6 @@ class StripeService:
         Raises:
             ValueError: If session is invalid or doesn't belong to teacher
         """
-        print(f"[StripeService] Verifying session {session_id} for teacher {teacher_id}")
 
         # Validate session_id format
         if not session_id or not session_id.startswith('cs_'):
@@ -328,7 +268,6 @@ class StripeService:
         ).eq("id", teacher_id).single().execute()
 
         if teacher_record.data and teacher_record.data.get("has_paid"):
-            print(f"[StripeService] Teacher {teacher_id} already marked as paid")
             return {
                 "already_processed": True,
                 "verified": True,
@@ -339,19 +278,16 @@ class StripeService:
         # Retrieve session from Stripe
         try:
             session = stripe.checkout.Session.retrieve(session_id)
-        except stripe.error.InvalidRequestError as e:
-            print(f"[StripeService] Invalid session ID: {e}")
+        except stripe.error.InvalidRequestError:
             raise ValueError(f"Invalid or expired session: {session_id}")
 
         # Validate session belongs to this teacher
         session_teacher_id = session.get("metadata", {}).get("teacher_id")
         if session_teacher_id and int(session_teacher_id) != teacher_id:
-            print(f"[StripeService] Session teacher_id mismatch: {session_teacher_id} != {teacher_id}")
             raise ValueError("Session does not belong to this teacher")
 
         # Check payment status
         if session.payment_status != "paid":
-            print(f"[StripeService] Session not paid: {session.payment_status}")
             return {
                 "already_processed": False,
                 "verified": False,
@@ -361,7 +297,6 @@ class StripeService:
 
         # Payment succeeded - process it using existing handler
         # This is idempotent (checks for existing payment record)
-        print(f"[StripeService] Processing verified session via fallback")
 
         # Convert Stripe session object to dict for handle_checkout_completed
         session_dict = {

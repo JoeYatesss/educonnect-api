@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from app.models.blog import BlogPostCreate, BlogPostUpdate, BlogPostResponse, BlogPostPublic
 from app.dependencies import get_current_admin
 from app.db.supabase import get_supabase_client
+from app.middleware.rate_limit import limiter
 from typing import List, Optional
 from datetime import datetime
 import re
@@ -22,7 +23,9 @@ def slugify(text: str) -> str:
 # ==================== PUBLIC ENDPOINTS (no auth required) ====================
 
 @router.get("/public", response_model=List[BlogPostPublic])
+@limiter.limit("100/minute")
 async def list_published_posts(
+    request: Request,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     category: Optional[str] = None
@@ -47,7 +50,8 @@ async def list_published_posts(
 
 
 @router.get("/public/{slug}", response_model=BlogPostPublic)
-async def get_published_post_by_slug(slug: str):
+@limiter.limit("100/minute")
+async def get_published_post_by_slug(request: Request, slug: str):
     """
     Get a single published blog post by slug (public endpoint)
 
@@ -69,7 +73,9 @@ async def get_published_post_by_slug(slug: str):
 # ==================== ADMIN ENDPOINTS (auth required) ====================
 
 @router.post("/", response_model=BlogPostResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/hour")
 async def create_blog_post(
+    request: Request,
     post: BlogPostCreate,
     admin: dict = Depends(get_current_admin)
 ):
@@ -166,7 +172,9 @@ async def get_blog_post(
 
 
 @router.patch("/{post_id}", response_model=BlogPostResponse)
+@limiter.limit("60/hour")
 async def update_blog_post(
+    request: Request,
     post_id: int,
     post_update: BlogPostUpdate,
     admin: dict = Depends(get_current_admin)
@@ -220,7 +228,9 @@ async def update_blog_post(
 
 
 @router.delete("/{post_id}")
+@limiter.limit("20/hour")
 async def delete_blog_post(
+    request: Request,
     post_id: int,
     admin: dict = Depends(get_current_admin)
 ):

@@ -21,11 +21,9 @@ def get_jwks(supabase_url: str):
         # Remove trailing slash if present
         base_url = supabase_url.rstrip('/')
         jwks_url = f"{base_url}/auth/v1/.well-known/jwks.json"
-        print(f"[JWT] Fetching JWKS from: {jwks_url}")
         response = requests.get(jwks_url)
         response.raise_for_status()
         _jwks_cache = response.json()
-        print(f"[JWT] JWKS fetched successfully: {len(_jwks_cache.get('keys', []))} keys")
     return _jwks_cache
 
 
@@ -54,9 +52,8 @@ async def get_current_user(
                 audience="authenticated",
                 options={"verify_aud": True}
             )
-        except (JWTError, requests.RequestException) as es256_error:
+        except (JWTError, requests.RequestException):
             # If ES256 fails, try HS256 (legacy tokens)
-            print(f"[JWT] ES256 validation failed, trying HS256: {es256_error}")
             payload = jwt.decode(
                 token,
                 settings.supabase_jwt_secret,
@@ -76,9 +73,7 @@ async def get_current_user(
             "email": payload.get("email"),
             "role": payload.get("role"),
         }
-    except JWTError as e:
-        print(f"[JWT Validation Error] {type(e).__name__}: {str(e)}")
-        print(f"[JWT Validation Error] Token preview: {token[:50]}...")
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

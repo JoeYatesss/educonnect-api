@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from app.models.application import (
     ApplicationCreate,
     ApplicationUpdate,
@@ -8,6 +8,7 @@ from app.models.application import (
 )
 from app.dependencies import get_current_admin, get_current_teacher, require_payment
 from app.db.supabase import get_supabase_client
+from app.middleware.rate_limit import limiter
 from typing import List
 
 
@@ -65,7 +66,9 @@ async def get_all_applications(
 
 
 @router.post("/", response_model=List[ApplicationResponse])
+@limiter.limit("30/hour")
 async def submit_applications(
+    request: Request,
     application_data: ApplicationCreate,
     admin: dict = Depends(get_current_admin)
 ):
@@ -192,7 +195,9 @@ async def get_my_applications(
 
 
 @router.patch("/{application_id}", response_model=ApplicationResponse)
+@limiter.limit("60/hour")
 async def update_application_status(
+    request: Request,
     application_id: int,
     update_data: ApplicationUpdate,
     admin: dict = Depends(get_current_admin)
@@ -239,7 +244,9 @@ async def update_application_status(
 
 
 @router.post("/apply-to-match", response_model=ApplicationResponse)
+@limiter.limit("20/hour")
 async def apply_to_match(
+    request: Request,
     match_id: int,
     teacher: dict = Depends(require_payment)
 ):

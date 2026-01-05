@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from app.models.job import JobCreate, JobUpdate, JobResponse
 from app.dependencies import get_current_admin
 from app.db.supabase import get_supabase_client
+from app.middleware.rate_limit import limiter
 from typing import List, Optional
 
 
@@ -9,7 +10,9 @@ router = APIRouter()
 
 
 @router.post("/", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/hour")
 async def create_job(
+    request: Request,
     job: JobCreate,
     admin: dict = Depends(get_current_admin)
 ):
@@ -87,7 +90,9 @@ async def get_job(
 
 
 @router.patch("/{job_id}", response_model=JobResponse)
+@limiter.limit("60/hour")
 async def update_job(
+    request: Request,
     job_id: int,
     job_update: JobUpdate,
     admin: dict = Depends(get_current_admin)
@@ -119,7 +124,9 @@ async def update_job(
 
 
 @router.delete("/{job_id}")
+@limiter.limit("20/hour")
 async def delete_job(
+    request: Request,
     job_id: int,
     admin: dict = Depends(get_current_admin)
 ):

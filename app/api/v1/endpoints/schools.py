@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Request
 from app.models.school import SchoolCreate, SchoolUpdate, SchoolResponse
 from app.dependencies import get_current_admin
 from app.db.supabase import get_supabase_client
 from app.services.matching_service import MatchingService
+from app.middleware.rate_limit import limiter
 from typing import List, Optional
 import logging
 
@@ -16,7 +17,9 @@ router = APIRouter()
 
 
 @router.post("/", response_model=SchoolResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/hour")
 async def create_school(
+    request: Request,
     school: SchoolCreate,
     admin: dict = Depends(get_current_admin),
     background_tasks: BackgroundTasks = None
@@ -93,7 +96,9 @@ async def get_school(
 
 
 @router.patch("/{school_id}", response_model=SchoolResponse)
+@limiter.limit("60/hour")
 async def update_school(
+    request: Request,
     school_id: int,
     school_update: SchoolUpdate,
     admin: dict = Depends(get_current_admin),
@@ -143,7 +148,9 @@ def _run_matching_for_school(school_id: int):
 
 
 @router.delete("/{school_id}")
+@limiter.limit("20/hour")
 async def delete_school(
+    request: Request,
     school_id: int,
     admin: dict = Depends(get_current_admin)
 ):

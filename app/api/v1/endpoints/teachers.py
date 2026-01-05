@@ -7,8 +7,24 @@ from app.services.matching_service import MatchingService
 from app.middleware.rate_limit import limiter
 from typing import List
 import logging
+import magic
 
 logger = logging.getLogger(__name__)
+
+# MIME type validation mappings
+ALLOWED_CV_MIMES = {
+    'application/pdf': ['pdf'],
+    'application/msword': ['doc'],
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['docx'],
+}
+ALLOWED_VIDEO_MIMES = {
+    'video/mp4': ['mp4'],
+    'video/quicktime': ['mov'],
+}
+ALLOWED_IMAGE_MIMES = {
+    'image/jpeg': ['jpg', 'jpeg'],
+    'image/png': ['png'],
+}
 
 # Fields that affect matching - if updated, re-run matching algorithm
 PREFERENCE_FIELDS = {'subject_specialty', 'preferred_location', 'preferred_age_group', 'years_experience'}
@@ -320,7 +336,7 @@ async def upload_cv(
     Upload teacher CV (PDF, DOC, DOCX only, max 10MB)
     Rate limited to 10 uploads per hour
     """
-    # Validate file type
+    # Validate file extension
     allowed_extensions = ['pdf', 'doc', 'docx']
     file_extension = file.filename.split('.')[-1].lower()
 
@@ -338,6 +354,19 @@ async def upload_cv(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File size must be less than 10MB"
+        )
+
+    # Validate MIME type matches extension (prevents extension spoofing)
+    detected_mime = magic.from_buffer(file_data, mime=True)
+    if detected_mime not in ALLOWED_CV_MIMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content does not match a valid document type"
+        )
+    if file_extension not in ALLOWED_CV_MIMES.get(detected_mime, []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File extension does not match file content"
         )
 
     try:
@@ -382,7 +411,7 @@ async def upload_video(
     Upload teacher intro video (MP4, MOV only, max 100MB)
     Rate limited to 5 uploads per hour
     """
-    # Validate file type
+    # Validate file extension
     allowed_extensions = ['mp4', 'mov']
     file_extension = file.filename.split('.')[-1].lower()
 
@@ -400,6 +429,19 @@ async def upload_video(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File size must be less than 100MB"
+        )
+
+    # Validate MIME type matches extension (prevents extension spoofing)
+    detected_mime = magic.from_buffer(file_data, mime=True)
+    if detected_mime not in ALLOWED_VIDEO_MIMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content does not match a valid video type"
+        )
+    if file_extension not in ALLOWED_VIDEO_MIMES.get(detected_mime, []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File extension does not match file content"
         )
 
     try:
@@ -444,7 +486,7 @@ async def upload_headshot(
     Upload teacher headshot photo (JPG, PNG only, max 10MB)
     Rate limited to 10 uploads per hour
     """
-    # Validate file type
+    # Validate file extension
     allowed_extensions = ['jpg', 'jpeg', 'png']
     file_extension = file.filename.split('.')[-1].lower()
 
@@ -462,6 +504,19 @@ async def upload_headshot(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File size must be less than 10MB"
+        )
+
+    # Validate MIME type matches extension (prevents extension spoofing)
+    detected_mime = magic.from_buffer(file_data, mime=True)
+    if detected_mime not in ALLOWED_IMAGE_MIMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File content does not match a valid image type"
+        )
+    if file_extension not in ALLOWED_IMAGE_MIMES.get(detected_mime, []):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File extension does not match file content"
         )
 
     try:

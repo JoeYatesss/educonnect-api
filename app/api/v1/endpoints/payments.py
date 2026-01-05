@@ -101,7 +101,9 @@ async def detect_currency(
 
 
 @router.post("/set-currency")
+@limiter.limit("30/hour")
 async def set_currency(
+    request: Request,
     currency_request: SetCurrencyRequest,
     teacher: dict = Depends(get_current_teacher)
 ):
@@ -115,7 +117,6 @@ async def set_currency(
         )
 
     currency = currency_request.currency.upper()
-    print(f"[PaymentsAPI] Setting currency preference for teacher {teacher['id']}: {currency}")
 
     supabase = get_supabase_client()
     supabase.table("teachers").update({
@@ -149,7 +150,9 @@ async def get_my_payment(teacher: dict = Depends(get_current_teacher)):
 
 
 @router.post("/verify-session")
+@limiter.limit("30/hour")
 async def verify_payment_session(
+    request: Request,
     request_data: VerifySessionRequest,
     teacher: dict = Depends(get_current_teacher)
 ):
