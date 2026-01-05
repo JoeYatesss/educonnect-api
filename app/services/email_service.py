@@ -69,7 +69,7 @@ class EmailService:
 
         # Send email
         params = {
-            "from": "EduConnect <onboarding@resend.dev>",  # UPDATE with your verified domain
+            "from": "EduConnect <noreply@jjtechnologies.co.uk>",
             "to": [to_email],
             "subject": f"Welcome to EduConnect! Payment Confirmed - {formatted_amount}",
             "html": html_content,

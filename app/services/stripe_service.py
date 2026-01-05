@@ -1,4 +1,5 @@
 import stripe
+from datetime import datetime
 from app.config import get_settings
 from app.db.supabase import get_supabase_client
 from app.services.email_service import EmailService
@@ -224,7 +225,21 @@ class StripeService:
             "payment_date": "now()",
         }).eq("id", teacher_id).execute()
 
-        # TODO: Add email notification when domain is configured
+        # Send payment confirmation email
+        teacher = supabase.table("teachers").select("email, full_name").eq("id", teacher_id).single().execute()
+        if teacher.data:
+            try:
+                EmailService.send_payment_confirmation(
+                    to_email=teacher.data["email"],
+                    teacher_name=teacher.data.get("full_name", "Teacher"),
+                    amount=amount_total,
+                    currency=session["currency"].upper(),
+                    payment_date=datetime.now().isoformat(),
+                    receipt_url=receipt_url
+                )
+            except Exception as e:
+                # Log error but don't fail the payment flow
+                print(f"Failed to send confirmation email: {e}")
 
     @staticmethod
     def get_payment_by_teacher(teacher_id: int) -> Optional[dict]:
