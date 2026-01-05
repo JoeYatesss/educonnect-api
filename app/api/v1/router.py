@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, teachers, payments, webhooks, matching, schools, applications, signup
+from app.api.v1.endpoints import auth, teachers, payments, webhooks, matching, schools, applications, signup, blog, jobs
 
 api_router = APIRouter()
 
@@ -11,3 +11,5 @@ api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"]
 api_router.include_router(matching.router, prefix="/matching", tags=["matching"])
 api_router.include_router(schools.router, prefix="/schools", tags=["schools"])
 api_router.include_router(applications.router, prefix="/applications", tags=["applications"])
+api_router.include_router(blog.router, prefix="/blog", tags=["blog"])
+api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])

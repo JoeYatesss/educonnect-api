@@ -81,3 +81,4 @@ class MatchResponse(BaseModel):
     salary_range: Optional[str]
     match_score: float
     match_reasons: List[str]
+    is_submitted: bool = False

@@ -1,8 +1,38 @@
 from app.db.supabase import get_supabase_client
-from typing import List, Dict
+from typing import List, Dict, Union
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def parse_comma_separated(value: Union[str, List, None]) -> List[str]:
+    """
+    Parse comma-separated string or return list as-is.
+    Handles the mismatch between VARCHAR storage (teachers) and array storage (schools).
+    """
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if v]
+    if isinstance(value, str) and value:
+        return [s.strip() for s in value.split(',') if s.strip()]
+    return []
+
+
+def parse_years_experience(value: Union[str, int, None]) -> int:
+    """
+    Parse years_experience from VARCHAR to int.
+    Handles formats like "5", "5 years", "5+", etc.
+    """
+    if value is None:
+        return 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        # Extract first number from string
+        import re
+        match = re.search(r'\d+', value)
+        if match:
+            return int(match.group())
+    return 0
 
 
 class MatchingService:
@@ -158,12 +188,13 @@ class MatchingService:
         Calculate overall match score for teacher-school pair
         Returns (score, reasons)
         """
-        # Extract teacher data
-        teacher_locations = teacher.get('preferred_location', []) or []
-        teacher_subjects = teacher.get('subject_specialty', []) or []
-        teacher_age_groups = teacher.get('preferred_age_group', []) or []
-        teacher_years = teacher.get('years_experience', 0) or 0
-        teacher_has_chinese = teacher.get('has_chinese', False)  # TODO: Add to schema
+        # Extract teacher data (parse comma-separated strings from VARCHAR fields)
+        teacher_locations = parse_comma_separated(teacher.get('preferred_location'))
+        teacher_subjects = parse_comma_separated(teacher.get('subject_specialty'))
+        teacher_age_groups = parse_comma_separated(teacher.get('preferred_age_group'))
+        teacher_years = parse_years_experience(teacher.get('years_experience'))
+        # has_chinese field doesn't exist yet - default to False
+        teacher_has_chinese = teacher.get('has_chinese', False)
 
         # Extract school data
         school_city = school.get('city', '')
@@ -306,6 +337,90 @@ class MatchingService:
                 "salary_range": school_data.get("salary_range"),
                 "match_score": match["match_score"],
                 "match_reasons": match["match_reasons"],
+                "is_submitted": match.get("is_submitted", False),
             })
 
         return anonymous_matches
+
+    @staticmethod
+    def run_matching_for_school(school_id: int, min_score: float = 50.0) -> int:
+        """
+        Run matching algorithm for a single school against all teachers.
+        Upserts results to teacher_school_matches table.
+        Returns count of matches created/updated.
+        """
+        supabase = get_supabase_client()
+
+        # Get school data
+        school_response = supabase.table("schools").select("*").eq("id", school_id).eq("is_active", True).single().execute()
+        if not school_response.data:
+            logger.warning(f"School {school_id} not found or not active")
+            return 0
+
+        school = school_response.data
+
+        # Get all teachers
+        teachers_response = supabase.table("teachers").select("*").execute()
+        teachers = teachers_response.data or []
+
+        logger.info(f"Running matching for school {school_id} against {len(teachers)} teachers")
+
+        match_count = 0
+        for teacher in teachers:
+            score, reasons = MatchingService.calculate_match_score(teacher, school)
+
+            if score >= min_score:
+                match_data = {
+                    "teacher_id": teacher["id"],
+                    "school_id": school_id,
+                    "match_score": score,
+                    "match_reasons": reasons,
+                }
+                # Use upsert to handle existing matches
+                supabase.table("teacher_school_matches").upsert(
+                    match_data,
+                    on_conflict="teacher_id,school_id"
+                ).execute()
+                match_count += 1
+            else:
+                # Remove match if score dropped below threshold
+                supabase.table("teacher_school_matches").delete().eq(
+                    "teacher_id", teacher["id"]
+                ).eq("school_id", school_id).execute()
+
+        logger.info(f"Found {match_count} matches for school {school_id}")
+        return match_count
+
+    @staticmethod
+    def get_school_matches(school_id: int, limit: int = 50) -> List[Dict]:
+        """
+        Get matched teachers for a school (for admin display).
+        Returns full teacher details with match scores.
+        """
+        supabase = get_supabase_client()
+
+        response = supabase.table("teacher_school_matches").select(
+            "*, teachers(id, first_name, last_name, email, subject_specialty, "
+            "preferred_location, preferred_age_group, years_experience, status, has_paid)"
+        ).eq("school_id", school_id).order("match_score", desc=True).limit(limit).execute()
+
+        matches = []
+        for match in response.data or []:
+            teacher = match.get("teachers", {}) or {}
+            matches.append({
+                "match_id": match["id"],
+                "match_score": match["match_score"],
+                "match_reasons": match["match_reasons"],
+                "is_submitted": match.get("is_submitted", False),
+                "teacher_id": teacher.get("id"),
+                "teacher_name": f"{teacher.get('first_name', '')} {teacher.get('last_name', '')}".strip(),
+                "teacher_email": teacher.get("email"),
+                "subject_specialty": teacher.get("subject_specialty"),
+                "preferred_location": teacher.get("preferred_location"),
+                "preferred_age_group": teacher.get("preferred_age_group"),
+                "years_experience": teacher.get("years_experience"),
+                "status": teacher.get("status"),
+                "has_paid": teacher.get("has_paid", False),
+            })
+
+        return matches

@@ -37,8 +37,28 @@ class PaymentResponse(BaseModel):
 class CheckoutSessionCreate(BaseModel):
     success_url: str
     cancel_url: str
+    currency: Optional[str] = None  # GBP, EUR, or USD
 
 
 class CheckoutSessionResponse(BaseModel):
     session_id: str
     url: str
+
+
+class CurrencyDetectionResponse(BaseModel):
+    detected_country: str
+    detected_country_name: str
+    detected_currency: str
+    preferred_currency: Optional[str]
+    effective_currency: str
+    price_amount: int
+    price_formatted: str
+    available_currencies: list[str]
+
+
+class SetCurrencyRequest(BaseModel):
+    currency: str = Field(..., min_length=3, max_length=3, description="Currency code: GBP, EUR, or USD")
+
+
+class VerifySessionRequest(BaseModel):
+    session_id: str = Field(..., description="Stripe Checkout Session ID (cs_...)")

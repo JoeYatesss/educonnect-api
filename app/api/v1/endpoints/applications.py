@@ -6,12 +6,62 @@ from app.models.application import (
     ApplicationWithSchoolResponse,
     AnonymousApplicationResponse
 )
-from app.dependencies import get_current_admin, get_current_teacher
+from app.dependencies import get_current_admin, get_current_teacher, require_payment
 from app.db.supabase import get_supabase_client
 from typing import List
 
 
 router = APIRouter()
+
+
+@router.get("/")
+async def get_all_applications(
+    admin: dict = Depends(get_current_admin),
+    status: str = None,
+    limit: int = 50
+):
+    """
+    Get all applications with teacher and school details (Admin only)
+    """
+    supabase = get_supabase_client()
+
+    query = supabase.table("teacher_school_applications").select(
+        "*, teachers(id, first_name, last_name, email, nationality), schools(id, name, city, province, school_type)"
+    ).order("submitted_at", desc=True).limit(limit)
+
+    if status:
+        query = query.eq("status", status)
+
+    response = query.execute()
+
+    applications = []
+    for app in response.data or []:
+        teacher = app.get("teachers", {}) or {}
+        school = app.get("schools", {}) or {}
+        applications.append({
+            "id": app["id"],
+            "teacher_id": app["teacher_id"],
+            "school_id": app["school_id"],
+            "status": app["status"],
+            "submitted_at": app.get("submitted_at"),
+            "notes": app.get("notes"),
+            "teacher": {
+                "id": teacher.get("id"),
+                "first_name": teacher.get("first_name", ""),
+                "last_name": teacher.get("last_name", ""),
+                "email": teacher.get("email", ""),
+                "nationality": teacher.get("nationality", ""),
+            },
+            "school": {
+                "id": school.get("id"),
+                "name": school.get("name", ""),
+                "city": school.get("city", ""),
+                "province": school.get("province", ""),
+                "school_type": school.get("school_type", ""),
+            },
+        })
+
+    return applications
 
 
 @router.post("/", response_model=List[ApplicationResponse])
@@ -186,6 +236,66 @@ async def update_application_status(
         supabase.table("application_status_history").insert(history_data).execute()
 
     return response.data[0]
+
+
+@router.post("/apply-to-match", response_model=ApplicationResponse)
+async def apply_to_match(
+    match_id: int,
+    teacher: dict = Depends(require_payment)
+):
+    """
+    Teacher applies to a match (requires payment)
+    Converts match to application
+    """
+    supabase = get_supabase_client()
+
+    # Get match details and verify it belongs to this teacher
+    match_response = supabase.table("teacher_school_matches").select(
+        "*, schools(id)"
+    ).eq("id", match_id).eq("teacher_id", teacher["id"]).single().execute()
+
+    if not match_response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Match not found or doesn't belong to you"
+        )
+
+    school_id = match_response.data["schools"]["id"]
+
+    # Check if already applied to this school
+    existing = supabase.table("teacher_school_applications").select("id").eq(
+        "teacher_id", teacher["id"]
+    ).eq("school_id", school_id).execute()
+
+    if existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You have already applied to this school"
+        )
+
+    # Create application
+    app_data = {
+        "teacher_id": teacher["id"],
+        "school_id": school_id,
+        "match_id": match_id,
+        "status": "pending",
+        "submitted_at": "now()"
+    }
+
+    response = supabase.table("teacher_school_applications").insert(app_data).execute()
+
+    if response.data:
+        # Mark match as submitted
+        supabase.table("teacher_school_matches").update({
+            "is_submitted": True
+        }).eq("id", match_id).execute()
+
+        return response.data[0]
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Failed to create application"
+    )
 
 
 @router.get("/{application_id}/history")

@@ -1,7 +1,11 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, EmailStr
 from app.db.supabase import get_supabase_client
+from app.services.matching_service import MatchingService
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -20,13 +24,18 @@ class SignupTeacherRequest(BaseModel):
 
 
 @router.post("/create-teacher-profile", status_code=status.HTTP_201_CREATED)
-async def create_teacher_profile_signup(data: SignupTeacherRequest):
+async def create_teacher_profile_signup(
+    data: SignupTeacherRequest,
+    background_tasks: BackgroundTasks
+):
     """
     Create teacher profile during signup (no JWT required)
 
     This endpoint is called immediately after Supabase auth signup,
     before email verification. It verifies the user exists in Supabase auth
     before creating the profile.
+
+    Automatically triggers matching algorithm in background after creation.
     """
     supabase = get_supabase_client()
 
@@ -73,7 +82,24 @@ async def create_teacher_profile_signup(data: SignupTeacherRequest):
             detail="Failed to create teacher profile"
         )
 
+    teacher = response.data[0]
+
+    # Trigger matching algorithm in background
+    background_tasks.add_task(
+        _run_matching_for_teacher,
+        teacher["id"]
+    )
+
     return {
         "message": "Teacher profile created successfully",
-        "teacher": response.data[0]
+        "teacher": teacher
     }
+
+
+def _run_matching_for_teacher(teacher_id: int):
+    """Background task wrapper for matching"""
+    try:
+        matches = MatchingService.run_matching_for_teacher(teacher_id)
+        logger.info(f"Auto-matching completed for teacher {teacher_id}: {len(matches)} matches found")
+    except Exception as e:
+        logger.error(f"Auto-matching failed for teacher {teacher_id}: {str(e)}")
