@@ -1,12 +1,6 @@
 import httpx
 from typing import Dict, Optional
-
-# Stripe Price IDs for each currency
-PRICE_IDS = {
-    'GBP': 'price_1Sl8ZoQNvL8mYDbo3NsCN1v4',  # £10.00
-    'EUR': 'price_1SmBQcQNvL8mYDbo9xPBKeoe',  # €11.99
-    'USD': 'price_1SmBQcQNvL8mYDboKjFAMmsf',  # $14.99
-}
+from app.config import get_settings
 
 # Price amounts in minor units (cents/pence)
 PRICE_AMOUNTS = {
@@ -117,16 +111,35 @@ class LocationService:
     @staticmethod
     def get_price_id_for_currency(currency: str) -> str:
         """
-        Get Stripe Price ID for currency
+        Get Stripe Price ID for currency from environment settings.
 
         Args:
             currency: Currency code (GBP, EUR, USD)
 
         Returns:
             Stripe Price ID
+
+        Raises:
+            ValueError: If price ID is not configured for the currency
         """
+        settings = get_settings()
         currency = currency.upper()
-        return PRICE_IDS.get(currency, PRICE_IDS['USD'])
+
+        price_ids = {
+            'GBP': settings.stripe_price_id_gbp,
+            'EUR': settings.stripe_price_id_eur,
+            'USD': settings.stripe_price_id_usd,
+        }
+
+        price_id = price_ids.get(currency) or price_ids.get('USD')
+
+        if not price_id:
+            raise ValueError(
+                f"Stripe price ID not configured for currency '{currency}'. "
+                f"Set STRIPE_PRICE_ID_{currency} environment variable."
+            )
+
+        return price_id
 
     @staticmethod
     def get_price_amount(currency: str) -> int:

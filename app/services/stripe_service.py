@@ -98,25 +98,36 @@ class StripeService:
         # Create checkout session
         from datetime import datetime
 
-        session = stripe.checkout.Session.create(
-            customer=customer_id,
-            payment_method_types=["card"],
-            line_items=[
-                {
-                    "price": price_id,
-                    "quantity": 1,
-                }
-            ],
-            mode="payment",
-            success_url=success_url,
-            cancel_url=cancel_url,
-            metadata={
-                "teacher_id": str(teacher_id),  # Primary identifier
-                "teacher_email": teacher_email,  # Backup identifier for fallback
-                "currency": currency,  # For tracking
-                "created_at": datetime.now().isoformat(),  # Timestamp for debugging
-            },
-        )
+        try:
+            session = stripe.checkout.Session.create(
+                customer=customer_id,
+                payment_method_types=["card"],
+                line_items=[
+                    {
+                        "price": price_id,
+                        "quantity": 1,
+                    }
+                ],
+                mode="payment",
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata={
+                    "teacher_id": str(teacher_id),  # Primary identifier
+                    "teacher_email": teacher_email,  # Backup identifier for fallback
+                    "currency": currency,  # For tracking
+                    "created_at": datetime.now().isoformat(),  # Timestamp for debugging
+                },
+            )
+        except stripe.error.InvalidRequestError as e:
+            # Provide helpful error for price ID misconfiguration
+            if "No such price" in str(e):
+                raise ValueError(
+                    f"Stripe price ID '{price_id}' not found. "
+                    f"This usually means the price exists in test mode but not live mode, "
+                    f"or vice versa. Check STRIPE_PRICE_ID_{currency} environment variable "
+                    f"matches your Stripe mode (test/live)."
+                ) from e
+            raise
 
         # Validate metadata was set correctly
         created_metadata = session.get("metadata", {})
