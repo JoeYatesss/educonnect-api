@@ -22,14 +22,16 @@ class ApplicationUpdate(BaseModel):
 class ApplicationResponse(BaseModel):
     id: int
     teacher_id: int
-    school_id: int
-    match_id: Optional[int]
+    school_id: Optional[int] = None  # None for job applications
+    job_id: Optional[int] = None  # None for school applications
+    match_id: Optional[int] = None
     status: ApplicationStatus
-    submitted_by: Optional[str]
-    notes: Optional[str]
-    submitted_at: Optional[datetime]
+    submitted_by: Optional[str] = None
+    notes: Optional[str] = None
+    submitted_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    external_url: Optional[str] = None  # For job applications
 
     class Config:
         from_attributes = True
