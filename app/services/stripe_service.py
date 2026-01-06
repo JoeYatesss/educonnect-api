@@ -1,10 +1,13 @@
 import stripe
+import logging
 from datetime import datetime
 from app.config import get_settings
 from app.db.supabase import get_supabase_client
 from app.services.email_service import EmailService
 from app.services.location_service import LocationService
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 settings = get_settings()
@@ -235,6 +238,21 @@ class StripeService:
             "payment_id": payment_intent_id,
             "payment_date": "now()",
         }).eq("id", teacher_id).execute()
+
+        # Run matching algorithm for the teacher now that they've paid
+        try:
+            from app.services.matching_service import MatchingService
+
+            # Run school matching
+            school_matches = MatchingService.run_matching_for_teacher(teacher_id)
+            logger.info(f"Payment success - school matching completed for teacher {teacher_id}: {len(school_matches)} matches")
+
+            # Run job matching
+            job_match_count = MatchingService.run_matching_for_teacher_jobs(teacher_id)
+            logger.info(f"Payment success - job matching completed for teacher {teacher_id}: {job_match_count} matches")
+        except Exception as e:
+            # Log error but don't fail the payment flow
+            logger.error(f"Failed to run matching for teacher {teacher_id} after payment: {e}")
 
         # Send payment confirmation email
         teacher = supabase.table("teachers").select("email, full_name").eq("id", teacher_id).single().execute()

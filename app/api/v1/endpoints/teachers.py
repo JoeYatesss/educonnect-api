@@ -304,10 +304,10 @@ async def update_teacher_profile(
             detail="Failed to update teacher profile"
         )
 
-    # Check if any preference fields were updated - if so, re-run matching
+    # Check if any preference fields were updated - if so, re-run matching (only for paid users)
     updated_preferences = set(update_dict.keys()) & PREFERENCE_FIELDS
-    if updated_preferences and background_tasks:
-        logger.info(f"Teacher {teacher['id']} updated preferences: {updated_preferences}, triggering re-match")
+    if updated_preferences and background_tasks and teacher.get("has_paid"):
+        logger.info(f"Teacher {teacher['id']} (paid) updated preferences: {updated_preferences}, triggering re-match")
         background_tasks.add_task(
             _run_matching_for_teacher,
             teacher["id"]
@@ -333,26 +333,12 @@ def _run_matching_for_teacher(teacher_id: int):
         logger.error(f"Job matching failed for teacher {teacher_id}: {str(e)}")
 
 
-def _is_profile_complete(teacher: dict) -> bool:
-    """Check if teacher has completed all required profile fields for matching"""
-    required_fields = [
-        teacher.get("cv_path"),
-        teacher.get("headshot_photo_path"),
-        teacher.get("intro_video_path"),
-        teacher.get("preferred_location"),
-        teacher.get("subject_specialty"),
-        teacher.get("preferred_age_group"),
-    ]
-    return all(field for field in required_fields)
-
-
 @router.post("/upload-cv")
 @limiter.limit("10/hour")
 async def upload_cv(
     request: Request,
     file: UploadFile = File(...),
-    teacher: dict = Depends(get_current_teacher),
-    background_tasks: BackgroundTasks = None
+    teacher: dict = Depends(get_current_teacher)
 ):
     """
     Upload teacher CV (PDF, DOC, DOCX only, max 10MB)
@@ -411,12 +397,6 @@ async def upload_cv(
                 detail="Failed to update teacher record"
             )
 
-        # Check if profile is now complete and trigger matching
-        updated_teacher = response.data[0]
-        if _is_profile_complete(updated_teacher) and background_tasks:
-            logger.info(f"Teacher {teacher['id']} profile now complete after CV upload, triggering matching")
-            background_tasks.add_task(_run_matching_for_teacher, teacher["id"])
-
         return {
             "message": "CV uploaded successfully",
             "file_path": file_path
@@ -433,8 +413,7 @@ async def upload_cv(
 async def upload_video(
     request: Request,
     file: UploadFile = File(...),
-    teacher: dict = Depends(get_current_teacher),
-    background_tasks: BackgroundTasks = None
+    teacher: dict = Depends(get_current_teacher)
 ):
     """
     Upload teacher intro video (MP4, MOV only, max 100MB)
@@ -493,12 +472,6 @@ async def upload_video(
                 detail="Failed to update teacher record"
             )
 
-        # Check if profile is now complete and trigger matching
-        updated_teacher = response.data[0]
-        if _is_profile_complete(updated_teacher) and background_tasks:
-            logger.info(f"Teacher {teacher['id']} profile now complete after video upload, triggering matching")
-            background_tasks.add_task(_run_matching_for_teacher, teacher["id"])
-
         return {
             "message": "Video uploaded successfully",
             "file_path": file_path
@@ -515,8 +488,7 @@ async def upload_video(
 async def upload_headshot(
     request: Request,
     file: UploadFile = File(...),
-    teacher: dict = Depends(get_current_teacher),
-    background_tasks: BackgroundTasks = None
+    teacher: dict = Depends(get_current_teacher)
 ):
     """
     Upload teacher headshot photo (JPG, PNG only, max 10MB)
@@ -574,12 +546,6 @@ async def upload_headshot(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to update teacher record"
             )
-
-        # Check if profile is now complete and trigger matching
-        updated_teacher = response.data[0]
-        if _is_profile_complete(updated_teacher) and background_tasks:
-            logger.info(f"Teacher {teacher['id']} profile now complete after headshot upload, triggering matching")
-            background_tasks.add_task(_run_matching_for_teacher, teacher["id"])
 
         return {
             "message": "Headshot uploaded successfully",

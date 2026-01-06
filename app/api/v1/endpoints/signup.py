@@ -1,12 +1,8 @@
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from app.db.supabase import get_supabase_client
-from app.services.matching_service import MatchingService
 from app.middleware.rate_limit import limiter
 from typing import Optional
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -28,8 +24,7 @@ class SignupTeacherRequest(BaseModel):
 @limiter.limit("10/hour")
 async def create_teacher_profile_signup(
     request: Request,
-    data: SignupTeacherRequest,
-    background_tasks: BackgroundTasks
+    data: SignupTeacherRequest
 ):
     """
     Create teacher profile during signup (no JWT required)
@@ -38,7 +33,7 @@ async def create_teacher_profile_signup(
     before email verification. It verifies the user exists in Supabase auth
     before creating the profile.
 
-    Automatically triggers matching algorithm in background after creation.
+    Matching is triggered later when payment is completed.
     """
     supabase = get_supabase_client()
 
@@ -87,30 +82,7 @@ async def create_teacher_profile_signup(
 
     teacher = response.data[0]
 
-    # Trigger matching algorithm in background
-    background_tasks.add_task(
-        _run_matching_for_teacher,
-        teacher["id"]
-    )
-
     return {
         "message": "Teacher profile created successfully",
         "teacher": teacher
     }
-
-
-def _run_matching_for_teacher(teacher_id: int):
-    """Background task wrapper for matching - runs both school and job matching"""
-    try:
-        # Run school matching
-        school_matches = MatchingService.run_matching_for_teacher(teacher_id)
-        logger.info(f"School matching completed for teacher {teacher_id}: {len(school_matches)} matches found")
-    except Exception as e:
-        logger.error(f"School matching failed for teacher {teacher_id}: {str(e)}")
-
-    try:
-        # Run job matching
-        job_match_count = MatchingService.run_matching_for_teacher_jobs(teacher_id)
-        logger.info(f"Job matching completed for teacher {teacher_id}: {job_match_count} matches found")
-    except Exception as e:
-        logger.error(f"Job matching failed for teacher {teacher_id}: {str(e)}")
