@@ -563,15 +563,17 @@ class MatchingService:
         """
         Get all matches for a teacher (both school and job matches).
         Returns combined list sorted by match score.
+        Includes expiry_date from applications for submitted matches.
         """
         supabase = get_supabase_client()
 
-        # Get all matches (both school and job)
+        # Get all matches (both school and job) with related application data
         response = supabase.table("teacher_school_matches").select(
             "*, schools(city, province, school_type, age_groups, salary_range), "
             "jobs(city, province, school_type, age_groups, salary, title, company, "
             "application_deadline, start_date, visa_sponsorship, accommodation_provided, "
-            "external_url, source)"
+            "external_url, source), "
+            "teacher_school_applications(expiry_date, role_name)"
         ).eq("teacher_id", teacher_id).order("match_score", desc=True).limit(limit).execute()
 
         matches = response.data or []
@@ -581,6 +583,19 @@ class MatchingService:
         for match in matches:
             school_data = match.get("schools")
             job_data = match.get("jobs")
+            # Get application data (may be a list, take first if exists)
+            app_data = match.get("teacher_school_applications")
+            if isinstance(app_data, list) and app_data:
+                app_data = app_data[0]
+            elif not isinstance(app_data, dict):
+                app_data = {}
+
+            # Get expiry_date and role_name from application if available
+            expiry_date = app_data.get("expiry_date") if app_data else None
+            # Prefer role_name from application, fall back to match
+            role_name = app_data.get("role_name") if app_data else match.get("role_name")
+            if not role_name:
+                role_name = match.get("role_name")
 
             if school_data:
                 # School match
@@ -595,7 +610,8 @@ class MatchingService:
                     "match_score": match["match_score"],
                     "match_reasons": match["match_reasons"],
                     "is_submitted": match.get("is_submitted", False),
-                    "role_name": match.get("role_name"),
+                    "role_name": role_name,
+                    "expiry_date": expiry_date,
                     # School-specific (null for jobs)
                     "school_id": match.get("school_id"),
                     "job_id": None,
@@ -622,7 +638,8 @@ class MatchingService:
                     "match_score": match["match_score"],
                     "match_reasons": match["match_reasons"],
                     "is_submitted": match.get("is_submitted", False),
-                    "role_name": match.get("role_name"),
+                    "role_name": role_name,
+                    "expiry_date": expiry_date,
                     # School-specific (null for jobs)
                     "school_id": None,
                     "job_id": match.get("job_id"),

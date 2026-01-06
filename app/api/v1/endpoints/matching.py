@@ -24,6 +24,7 @@ class UnifiedMatchResponse(BaseModel):
     match_reasons: Optional[List[str]] = None
     is_submitted: bool = False
     role_name: Optional[str] = None
+    expiry_date: Optional[datetime] = None  # Application expiry date
     # IDs
     school_id: Optional[int] = None
     job_id: Optional[int] = None
