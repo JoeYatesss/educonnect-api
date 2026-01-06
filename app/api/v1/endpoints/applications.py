@@ -22,12 +22,14 @@ async def get_all_applications(
     limit: int = 50
 ):
     """
-    Get all applications with teacher and school details (Admin only)
+    Get all applications with teacher and school/job details (Admin only)
     """
     supabase = get_supabase_client()
 
     query = supabase.table("teacher_school_applications").select(
-        "*, teachers(id, first_name, last_name, email, nationality), schools(id, name, city, province, school_type)"
+        "*, teachers(id, first_name, last_name, email, nationality), "
+        "schools(id, name, city, province, school_type), "
+        "jobs(id, title, company, city, province, external_url, source)"
     ).order("submitted_at", desc=True).limit(limit)
 
     if status:
@@ -39,15 +41,22 @@ async def get_all_applications(
     for app in response.data or []:
         teacher = app.get("teachers", {}) or {}
         school = app.get("schools", {}) or {}
+        job = app.get("jobs", {}) or {}
+
+        # Determine if this is a job application or school application
+        is_job_application = bool(app.get("job_id"))
+
         applications.append({
             "id": app["id"],
             "teacher_id": app["teacher_id"],
             "school_id": app["school_id"],
+            "job_id": app.get("job_id"),
             "status": app["status"],
             "submitted_at": app.get("submitted_at"),
             "notes": app.get("notes"),
             "role_name": app.get("role_name"),
             "expiry_date": app.get("expiry_date"),
+            "is_job_application": is_job_application,
             "teacher": {
                 "id": teacher.get("id"),
                 "first_name": teacher.get("first_name", ""),
@@ -61,7 +70,16 @@ async def get_all_applications(
                 "city": school.get("city", ""),
                 "province": school.get("province", ""),
                 "school_type": school.get("school_type", ""),
-            },
+            } if not is_job_application else None,
+            "job": {
+                "id": job.get("id"),
+                "title": job.get("title", ""),
+                "company": job.get("company", ""),
+                "city": job.get("city", ""),
+                "province": job.get("province", ""),
+                "external_url": job.get("external_url", ""),
+                "source": job.get("source", ""),
+            } if is_job_application else None,
         })
 
     return applications
@@ -271,12 +289,13 @@ async def apply_to_match(
     """
     Teacher applies to a match (requires payment)
     Converts match to application
+    Only works for school matches, not job matches
     """
     supabase = get_supabase_client()
 
     # Get match details and verify it belongs to this teacher
     match_response = supabase.table("teacher_school_matches").select(
-        "*, schools(id)"
+        "*, schools(id), jobs(id, external_url)"
     ).eq("id", match_id).eq("teacher_id", teacher["id"]).single().execute()
 
     if not match_response.data:
@@ -285,23 +304,51 @@ async def apply_to_match(
             detail="Match not found or doesn't belong to you"
         )
 
-    school_id = match_response.data["schools"]["id"]
+    # Check if this is a job match (external job) or school match
+    job_data = match_response.data.get("jobs")
+    job_id = match_response.data.get("job_id")
+    schools_data = match_response.data.get("schools")
+    school_id = None
+    external_url = None
 
-    # Check if already applied to this school
-    existing = supabase.table("teacher_school_applications").select("id").eq(
-        "teacher_id", teacher["id"]
-    ).eq("school_id", school_id).execute()
+    if job_data or job_id:
+        # This is an external job match
+        job_id = job_id or (job_data.get("id") if job_data else None)
+        external_url = job_data.get("external_url") if job_data else None
+    elif schools_data and schools_data.get("id"):
+        # This is a school match
+        school_id = schools_data["id"]
+    elif match_response.data.get("school_id"):
+        school_id = match_response.data["school_id"]
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Match has no associated school or job"
+        )
+
+    # Check if already applied to this school or job
+    if school_id:
+        existing = supabase.table("teacher_school_applications").select("id").eq(
+            "teacher_id", teacher["id"]
+        ).eq("school_id", school_id).execute()
+        entity_type = "school"
+    else:
+        existing = supabase.table("teacher_school_applications").select("id").eq(
+            "teacher_id", teacher["id"]
+        ).eq("job_id", job_id).execute()
+        entity_type = "job"
 
     if existing.data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You have already applied to this school"
+            detail=f"You have already applied to this {entity_type}"
         )
 
     # Create application
     app_data = {
         "teacher_id": teacher["id"],
-        "school_id": school_id,
+        "school_id": school_id,  # Will be None for job applications
+        "job_id": job_id,  # Will be None for school applications
         "match_id": match_id,
         "status": "pending",
         "submitted_at": "now()"
@@ -315,7 +362,12 @@ async def apply_to_match(
             "is_submitted": True
         }).eq("id", match_id).execute()
 
-        return response.data[0]
+        # For job applications, include external_url in response
+        result = response.data[0]
+        if external_url:
+            result["external_url"] = external_url
+
+        return result
 
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
