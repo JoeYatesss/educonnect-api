@@ -4,7 +4,6 @@ from typing import List, Optional
 from datetime import datetime
 from app.dependencies import get_current_teacher, get_current_admin, require_payment
 from app.services.matching_service import MatchingService
-from app.models.school import MatchResponse
 
 
 class MatchUpdate(BaseModel):
@@ -17,8 +16,10 @@ class UnifiedMatchResponse(BaseModel):
     type: str  # 'school' or 'job'
     city: Optional[str] = None
     province: Optional[str] = None
+    location_chinese: Optional[str] = None
     school_type: Optional[str] = None
     age_groups: Optional[List[str]] = None
+    subjects: Optional[List[str]] = None
     salary_range: Optional[str] = None
     match_score: float
     match_reasons: Optional[List[str]] = None
@@ -37,6 +38,22 @@ class UnifiedMatchResponse(BaseModel):
     accommodation_provided: Optional[str] = None
     external_url: Optional[str] = None
     source: Optional[str] = None
+    description: Optional[str] = None
+    # Additional job fields from job detail pages
+    chinese_required: Optional[bool] = None
+    qualification: Optional[str] = None
+    contract_type: Optional[str] = None
+    job_functions: Optional[str] = None
+    requirements: Optional[str] = None
+    benefits: Optional[str] = None
+    is_new: Optional[bool] = None
+    contract_term: Optional[str] = None
+    job_type: Optional[str] = None
+    apply_by: Optional[str] = None
+    recruiter_email: Optional[str] = None
+    recruiter_phone: Optional[str] = None
+    about_school: Optional[str] = None
+    school_address: Optional[dict] = None
 
 
 router = APIRouter()

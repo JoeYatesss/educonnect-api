@@ -10,6 +10,21 @@ from app.dependencies import get_current_admin, get_current_teacher, require_pay
 from app.db.supabase import get_supabase_client
 from app.middleware.rate_limit import limiter
 from typing import List
+import json
+
+
+def parse_json_field(value):
+    """Parse JSON string to dict if needed."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
 
 
 router = APIRouter()
@@ -203,7 +218,12 @@ async def get_my_applications(
     supabase = get_supabase_client()
 
     response = supabase.table("teacher_school_applications").select(
-        "*, schools(city, province, school_type, salary_range), jobs(city, province, external_url)"
+        "*, schools(city, province, school_type, salary_range), "
+        "jobs(city, province, location_chinese, external_url, title, company, description, "
+        "application_deadline, salary, school_type, age_groups, subjects, chinese_required, "
+        "qualification, contract_type, job_functions, requirements, benefits, is_new, "
+        "contract_term, job_type, apply_by, recruiter_email, recruiter_phone, about_school, "
+        "school_address, start_date, visa_sponsorship, accommodation_provided)"
     ).eq("teacher_id", teacher["id"]).order("created_at", desc=True).execute()
 
     applications = []
@@ -216,17 +236,25 @@ async def get_my_applications(
         if is_job_application:
             city = job.get("city", "")
             province = job.get("province")
-            school_type = None
-            salary_range = None
+            school_type = job.get("school_type")
+            salary_range = job.get("salary")
             external_url = job.get("external_url")
+            # Use job title as role_name for job applications (fallback to app.role_name if set)
+            role_name = app.get("role_name") or job.get("title")
+            # Use job application_deadline as expiry_date (fallback to app.expiry_date if set)
+            expiry_date = app.get("expiry_date") or job.get("application_deadline")
+            job_description = job.get("description")
         else:
             city = school.get("city", "")
             province = school.get("province")
             school_type = school.get("school_type")
             salary_range = school.get("salary_range")
             external_url = None
+            role_name = app.get("role_name")
+            expiry_date = app.get("expiry_date")
+            job_description = None
 
-        applications.append({
+        app_data = {
             "id": app["id"],
             "city": city,
             "province": province,
@@ -235,11 +263,40 @@ async def get_my_applications(
             "status": app["status"],
             "submitted_at": app.get("submitted_at"),
             "updated_at": app["updated_at"],
-            "role_name": app.get("role_name"),
-            "expiry_date": app.get("expiry_date"),
+            "role_name": role_name,
+            "expiry_date": expiry_date,
             "is_job_application": is_job_application,
             "external_url": external_url,
-        })
+            "job_description": job_description,
+        }
+
+        # Add additional job fields for job applications
+        if is_job_application:
+            app_data.update({
+                "company": job.get("company"),
+                "location_chinese": job.get("location_chinese"),
+                "age_groups": job.get("age_groups", []),
+                "subjects": job.get("subjects", []),
+                "chinese_required": job.get("chinese_required"),
+                "qualification": job.get("qualification"),
+                "contract_type": job.get("contract_type"),
+                "job_functions": job.get("job_functions"),
+                "requirements": job.get("requirements"),
+                "benefits": job.get("benefits"),
+                "is_new": job.get("is_new"),
+                "contract_term": job.get("contract_term"),
+                "job_type": job.get("job_type"),
+                "apply_by": job.get("apply_by"),
+                "recruiter_email": job.get("recruiter_email"),
+                "recruiter_phone": job.get("recruiter_phone"),
+                "about_school": job.get("about_school"),
+                "school_address": parse_json_field(job.get("school_address")),
+                "start_date": job.get("start_date"),
+                "visa_sponsorship": job.get("visa_sponsorship"),
+                "accommodation_provided": job.get("accommodation_provided"),
+            })
+
+        applications.append(app_data)
 
     return applications
 

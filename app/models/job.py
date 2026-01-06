@@ -37,6 +37,13 @@ class JobCreate(BaseModel):
     accommodation_provided: Optional[str] = Field(None, max_length=255)
     school_type: Optional[str] = Field(None, max_length=50)
     contract_term: Optional[str] = Field(None, max_length=50)
+    # New structured fields from detail pages
+    job_type: Optional[str] = Field(None, max_length=100)
+    apply_by: Optional[str] = Field(None, max_length=100)
+    recruiter_email: Optional[str] = Field(None, max_length=255)
+    recruiter_phone: Optional[str] = Field(None, max_length=50)
+    about_school: Optional[str] = None
+    school_address: Optional[dict] = None  # JSON object
 
 
 class JobUpdate(BaseModel):
@@ -73,6 +80,13 @@ class JobUpdate(BaseModel):
     accommodation_provided: Optional[str] = Field(None, max_length=255)
     school_type: Optional[str] = Field(None, max_length=50)
     contract_term: Optional[str] = Field(None, max_length=50)
+    # New structured fields from detail pages
+    job_type: Optional[str] = Field(None, max_length=100)
+    apply_by: Optional[str] = Field(None, max_length=100)
+    recruiter_email: Optional[str] = Field(None, max_length=255)
+    recruiter_phone: Optional[str] = Field(None, max_length=50)
+    about_school: Optional[str] = None
+    school_address: Optional[dict] = None
 
 
 class JobResponse(BaseModel):
@@ -110,6 +124,13 @@ class JobResponse(BaseModel):
     accommodation_provided: Optional[str] = None
     school_type: Optional[str] = None
     contract_term: Optional[str] = None
+    # New structured fields from detail pages
+    job_type: Optional[str] = None
+    apply_by: Optional[str] = None
+    recruiter_email: Optional[str] = None
+    recruiter_phone: Optional[str] = None
+    about_school: Optional[str] = None
+    school_address: Optional[dict] = None
     # Timestamps
     created_at: datetime
     updated_at: datetime

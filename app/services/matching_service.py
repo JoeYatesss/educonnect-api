@@ -1,8 +1,26 @@
 from app.db.supabase import get_supabase_client
 from typing import List, Dict, Union
 import logging
+import json
 
 logger = logging.getLogger(__name__)
+
+
+def parse_json_field(value: Union[str, dict, None]) -> Union[dict, None]:
+    """
+    Parse a JSON string field into a dict.
+    Handles JSONB fields that may come as strings from Supabase.
+    """
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
 
 
 def parse_comma_separated(value: Union[str, List, None]) -> List[str]:
@@ -570,9 +588,11 @@ class MatchingService:
         # Get all matches (both school and job) with related application data
         response = supabase.table("teacher_school_matches").select(
             "*, schools(city, province, school_type, age_groups, salary_range), "
-            "jobs(city, province, school_type, age_groups, salary, title, company, "
+            "jobs(city, province, location_chinese, school_type, age_groups, salary, title, company, "
             "application_deadline, start_date, visa_sponsorship, accommodation_provided, "
-            "external_url, source), "
+            "external_url, source, description, chinese_required, qualification, contract_type, "
+            "job_functions, requirements, benefits, subjects, is_new, contract_term, job_type, "
+            "apply_by, recruiter_email, recruiter_phone, about_school, school_address), "
             "teacher_school_applications(expiry_date, role_name)"
         ).eq("teacher_id", teacher_id).order("match_score", desc=True).limit(limit).execute()
 
@@ -624,22 +644,29 @@ class MatchingService:
                     "accommodation_provided": None,
                     "external_url": None,
                     "source": "manual",
+                    "description": None,
                 })
             elif job_data:
-                # Job match
+                # Job match - use job title as role_name if not set
+                job_role_name = role_name or job_data.get("title")
+                # Use application_deadline as expiry_date if not set
+                job_expiry_date = expiry_date or job_data.get("application_deadline")
+
                 unified_matches.append({
                     "id": match["id"],
                     "type": "job",
                     "city": job_data.get("city"),
                     "province": job_data.get("province"),
+                    "location_chinese": job_data.get("location_chinese"),
                     "school_type": job_data.get("school_type"),
                     "age_groups": job_data.get("age_groups", []),
+                    "subjects": job_data.get("subjects", []),
                     "salary_range": job_data.get("salary"),  # Jobs use 'salary' not 'salary_range'
                     "match_score": match["match_score"],
                     "match_reasons": match["match_reasons"],
                     "is_submitted": match.get("is_submitted", False),
-                    "role_name": role_name,
-                    "expiry_date": expiry_date,
+                    "role_name": job_role_name,
+                    "expiry_date": job_expiry_date,
                     # School-specific (null for jobs)
                     "school_id": None,
                     "job_id": match.get("job_id"),
@@ -652,6 +679,22 @@ class MatchingService:
                     "accommodation_provided": job_data.get("accommodation_provided"),
                     "external_url": job_data.get("external_url"),
                     "source": job_data.get("source", "tes"),
+                    "description": job_data.get("description"),
+                    # New fields from job detail pages
+                    "chinese_required": job_data.get("chinese_required"),
+                    "qualification": job_data.get("qualification"),
+                    "contract_type": job_data.get("contract_type"),
+                    "job_functions": job_data.get("job_functions"),
+                    "requirements": job_data.get("requirements"),
+                    "benefits": job_data.get("benefits"),
+                    "is_new": job_data.get("is_new"),
+                    "contract_term": job_data.get("contract_term"),
+                    "job_type": job_data.get("job_type"),
+                    "apply_by": job_data.get("apply_by"),
+                    "recruiter_email": job_data.get("recruiter_email"),
+                    "recruiter_phone": job_data.get("recruiter_phone"),
+                    "about_school": job_data.get("about_school"),
+                    "school_address": parse_json_field(job_data.get("school_address")),
                 })
 
         return unified_matches

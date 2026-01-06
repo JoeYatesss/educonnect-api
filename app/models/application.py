@@ -59,6 +59,7 @@ class AnonymousApplicationResponse(BaseModel):
     id: int
     city: str
     province: Optional[str] = None
+    location_chinese: Optional[str] = None
     school_type: Optional[str] = None
     salary_range: Optional[str] = None
     status: ApplicationStatus
@@ -68,3 +69,25 @@ class AnonymousApplicationResponse(BaseModel):
     expiry_date: Optional[datetime] = None
     is_job_application: bool = False
     external_url: Optional[str] = None
+    job_description: Optional[str] = None
+    # Additional job fields
+    company: Optional[str] = None
+    age_groups: Optional[List[str]] = None
+    subjects: Optional[List[str]] = None
+    chinese_required: Optional[bool] = None
+    qualification: Optional[str] = None
+    contract_type: Optional[str] = None
+    job_functions: Optional[str] = None
+    requirements: Optional[str] = None
+    benefits: Optional[str] = None
+    is_new: Optional[bool] = None
+    contract_term: Optional[str] = None
+    job_type: Optional[str] = None
+    apply_by: Optional[str] = None
+    recruiter_email: Optional[str] = None
+    recruiter_phone: Optional[str] = None
+    about_school: Optional[str] = None
+    school_address: Optional[dict] = None
+    start_date: Optional[str] = None
+    visa_sponsorship: Optional[bool] = None
+    accommodation_provided: Optional[str] = None
