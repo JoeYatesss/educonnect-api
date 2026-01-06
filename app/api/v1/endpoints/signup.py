@@ -100,9 +100,17 @@ async def create_teacher_profile_signup(
 
 
 def _run_matching_for_teacher(teacher_id: int):
-    """Background task wrapper for matching"""
+    """Background task wrapper for matching - runs both school and job matching"""
     try:
-        matches = MatchingService.run_matching_for_teacher(teacher_id)
-        logger.info(f"Auto-matching completed for teacher {teacher_id}: {len(matches)} matches found")
+        # Run school matching
+        school_matches = MatchingService.run_matching_for_teacher(teacher_id)
+        logger.info(f"School matching completed for teacher {teacher_id}: {len(school_matches)} matches found")
     except Exception as e:
-        logger.error(f"Auto-matching failed for teacher {teacher_id}: {str(e)}")
+        logger.error(f"School matching failed for teacher {teacher_id}: {str(e)}")
+
+    try:
+        # Run job matching
+        job_match_count = MatchingService.run_matching_for_teacher_jobs(teacher_id)
+        logger.info(f"Job matching completed for teacher {teacher_id}: {job_match_count} matches found")
+    except Exception as e:
+        logger.error(f"Job matching failed for teacher {teacher_id}: {str(e)}")
