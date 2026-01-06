@@ -58,11 +58,13 @@ class AnonymousApplicationResponse(BaseModel):
     """Application response for teachers (no school names)"""
     id: int
     city: str
-    province: Optional[str]
-    school_type: Optional[str]
-    salary_range: Optional[str]
+    province: Optional[str] = None
+    school_type: Optional[str] = None
+    salary_range: Optional[str] = None
     status: ApplicationStatus
-    submitted_at: Optional[datetime]
+    submitted_at: Optional[datetime] = None
     updated_at: datetime
     role_name: Optional[str] = None
     expiry_date: Optional[datetime] = None
+    is_job_application: bool = False
+    external_url: Optional[str] = None

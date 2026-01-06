@@ -198,27 +198,47 @@ async def get_my_applications(
 ):
     """
     Get current teacher's applications (anonymized - no school names)
+    Includes both school applications and job applications
     """
     supabase = get_supabase_client()
 
     response = supabase.table("teacher_school_applications").select(
-        "*, schools(city, province, school_type, salary_range)"
+        "*, schools(city, province, school_type, salary_range), jobs(city, province, external_url)"
     ).eq("teacher_id", teacher["id"]).order("created_at", desc=True).execute()
 
     applications = []
     for app in response.data or []:
-        school = app.get("schools", {})
+        school = app.get("schools") or {}
+        job = app.get("jobs") or {}
+        is_job_application = bool(app.get("job_id"))
+
+        # Use job data for job applications, school data for school applications
+        if is_job_application:
+            city = job.get("city", "")
+            province = job.get("province")
+            school_type = None
+            salary_range = None
+            external_url = job.get("external_url")
+        else:
+            city = school.get("city", "")
+            province = school.get("province")
+            school_type = school.get("school_type")
+            salary_range = school.get("salary_range")
+            external_url = None
+
         applications.append({
             "id": app["id"],
-            "city": school.get("city", ""),
-            "province": school.get("province"),
-            "school_type": school.get("school_type"),
-            "salary_range": school.get("salary_range"),
+            "city": city,
+            "province": province,
+            "school_type": school_type,
+            "salary_range": salary_range,
             "status": app["status"],
             "submitted_at": app.get("submitted_at"),
             "updated_at": app["updated_at"],
             "role_name": app.get("role_name"),
             "expiry_date": app.get("expiry_date"),
+            "is_job_application": is_job_application,
+            "external_url": external_url,
         })
 
     return applications
