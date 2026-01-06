@@ -8,11 +8,15 @@ class ApplicationCreate(BaseModel):
     teacher_id: int
     school_ids: List[int] = Field(..., min_items=1, max_items=10)
     notes: Optional[str] = None
+    role_name: Optional[str] = None
+    expiry_date: Optional[datetime] = None
 
 
 class ApplicationUpdate(BaseModel):
-    status: ApplicationStatus
+    status: Optional[ApplicationStatus] = None
     notes: Optional[str] = None
+    role_name: Optional[str] = None
+    expiry_date: Optional[datetime] = None
 
 
 class ApplicationResponse(BaseModel):
@@ -44,6 +48,8 @@ class ApplicationWithSchoolResponse(BaseModel):
     submitted_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
+    role_name: Optional[str] = None
+    expiry_date: Optional[datetime] = None
 
 
 class AnonymousApplicationResponse(BaseModel):
@@ -56,3 +62,5 @@ class AnonymousApplicationResponse(BaseModel):
     status: ApplicationStatus
     submitted_at: Optional[datetime]
     updated_at: datetime
+    role_name: Optional[str] = None
+    expiry_date: Optional[datetime] = None

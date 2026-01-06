@@ -82,3 +82,4 @@ class MatchResponse(BaseModel):
     match_score: float
     match_reasons: List[str]
     is_submitted: bool = False
+    role_name: Optional[str] = None

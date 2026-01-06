@@ -46,6 +46,8 @@ async def get_all_applications(
             "status": app["status"],
             "submitted_at": app.get("submitted_at"),
             "notes": app.get("notes"),
+            "role_name": app.get("role_name"),
+            "expiry_date": app.get("expiry_date"),
             "teacher": {
                 "id": teacher.get("id"),
                 "first_name": teacher.get("first_name", ""),
@@ -112,19 +114,25 @@ async def submit_applications(
             "status": "pending",
             "submitted_by": admin["id"],
             "notes": application_data.notes,
+            "role_name": application_data.role_name,
             "submitted_at": "now()"
         }
+
+        # Add expiry_date if provided
+        if application_data.expiry_date:
+            app_data["expiry_date"] = application_data.expiry_date.isoformat()
 
         response = supabase.table("teacher_school_applications").insert(app_data).execute()
 
         if response.data:
             created_applications.append(response.data[0])
 
-            # Update match as submitted
+            # Update match as submitted and set role_name
             if match_id:
-                supabase.table("teacher_school_matches").update({
-                    "is_submitted": True
-                }).eq("id", match_id).execute()
+                match_update = {"is_submitted": True}
+                if application_data.role_name:
+                    match_update["role_name"] = application_data.role_name
+                supabase.table("teacher_school_matches").update(match_update).eq("id", match_id).execute()
 
     if not created_applications:
         raise HTTPException(
@@ -159,6 +167,8 @@ async def get_teacher_applications_admin(
             "school_type": school.get("school_type"),
             "salary_range": school.get("salary_range"),
             "province": school.get("province"),
+            "role_name": app.get("role_name"),
+            "expiry_date": app.get("expiry_date"),
         })
 
     return applications
@@ -189,6 +199,8 @@ async def get_my_applications(
             "status": app["status"],
             "submitted_at": app.get("submitted_at"),
             "updated_at": app["updated_at"],
+            "role_name": app.get("role_name"),
+            "expiry_date": app.get("expiry_date"),
         })
 
     return applications
@@ -229,8 +241,8 @@ async def update_application_status(
             detail="Failed to update application"
         )
 
-    # Create status history record
-    if old_status != update_data.status:
+    # Create status history record if status changed
+    if update_data.status and old_status != update_data.status:
         history_data = {
             "application_id": application_id,
             "from_status": old_status,
@@ -239,6 +251,12 @@ async def update_application_status(
             "notes": update_data.notes
         }
         supabase.table("application_status_history").insert(history_data).execute()
+
+    # Also update the match's role_name if role_name was updated
+    if update_data.role_name and current.data.get("match_id"):
+        supabase.table("teacher_school_matches").update({
+            "role_name": update_data.role_name
+        }).eq("id", current.data["match_id"]).execute()
 
     return response.data[0]
 

@@ -338,6 +338,7 @@ class MatchingService:
                 "match_score": match["match_score"],
                 "match_reasons": match["match_reasons"],
                 "is_submitted": match.get("is_submitted", False),
+                "role_name": match.get("role_name"),
             })
 
         return anonymous_matches
@@ -412,6 +413,7 @@ class MatchingService:
                 "match_score": match["match_score"],
                 "match_reasons": match["match_reasons"],
                 "is_submitted": match.get("is_submitted", False),
+                "role_name": match.get("role_name"),
                 "teacher_id": teacher.get("id"),
                 "teacher_name": f"{teacher.get('first_name', '')} {teacher.get('last_name', '')}".strip(),
                 "teacher_email": teacher.get("email"),
@@ -424,3 +426,272 @@ class MatchingService:
             })
 
         return matches
+
+    # ========================================
+    # JOB MATCHING METHODS (for external jobs)
+    # ========================================
+
+    @staticmethod
+    def calculate_job_match_score(teacher: Dict, job: Dict) -> tuple[float, List[str]]:
+        """
+        Calculate overall match score for teacher-job pair.
+        Similar to school matching but uses job table fields.
+        Returns (score, reasons)
+        """
+        # Extract teacher data (parse comma-separated strings from VARCHAR fields)
+        teacher_locations = parse_comma_separated(teacher.get('preferred_location'))
+        teacher_subjects = parse_comma_separated(teacher.get('subject_specialty'))
+        teacher_age_groups = parse_comma_separated(teacher.get('preferred_age_group'))
+        teacher_years = parse_years_experience(teacher.get('years_experience'))
+        teacher_has_chinese = teacher.get('has_chinese', False)
+
+        # Extract job data (jobs use 'subjects' not 'subjects_needed')
+        job_city = job.get('city', '') or ''
+        job_province = job.get('province', '') or ''
+        job_subjects = job.get('subjects', []) or []
+        job_age_groups = job.get('age_groups', []) or []
+        job_experience_req = job.get('experience', '') or ''
+        job_chinese_req = job.get('chinese_required', False)
+
+        # Calculate component scores using existing methods
+        location_score = MatchingService.calculate_location_score(
+            teacher_locations, job_city, job_province
+        )
+        subject_score = MatchingService.calculate_subject_score(
+            teacher_subjects, job_subjects
+        )
+        age_group_score = MatchingService.calculate_age_group_score(
+            teacher_age_groups, job_age_groups
+        )
+        experience_score = MatchingService.calculate_experience_score(
+            teacher_years, job_experience_req
+        )
+        chinese_score = MatchingService.calculate_chinese_score(
+            teacher_has_chinese, job_chinese_req
+        )
+
+        # Calculate weighted total score
+        total_score = (
+            location_score * MatchingService.WEIGHT_LOCATION +
+            subject_score * MatchingService.WEIGHT_SUBJECT +
+            age_group_score * MatchingService.WEIGHT_AGE_GROUP +
+            experience_score * MatchingService.WEIGHT_EXPERIENCE +
+            chinese_score * MatchingService.WEIGHT_CHINESE
+        )
+
+        # Generate match reasons
+        reasons = []
+        if location_score >= 70:
+            city_display = job_city or job_province or 'China'
+            reasons.append(f"Location match: {city_display}")
+        if subject_score >= 70 and teacher_subjects and job_subjects:
+            matching_subjects = set([s.lower() for s in teacher_subjects]) & set([s.lower() for s in job_subjects])
+            reasons.append(f"Subject match: {', '.join(matching_subjects)}")
+        if age_group_score >= 70 and teacher_age_groups and job_age_groups:
+            matching_ages = set([a.lower() for a in teacher_age_groups]) & set([a.lower() for a in job_age_groups])
+            reasons.append(f"Age group match: {', '.join(matching_ages)}")
+        if experience_score >= 80:
+            reasons.append(f"Experience level ({teacher_years} years) matches requirements")
+        if chinese_score == 100 and job_chinese_req:
+            reasons.append("Chinese language proficiency")
+
+        return round(total_score, 2), reasons
+
+    @staticmethod
+    def run_matching_for_job(job_id: int, min_score: float = 50.0) -> int:
+        """
+        Run matching algorithm for a job against all teachers.
+        Saves results to teacher_school_matches table with job_id set.
+        Returns count of matches created.
+        """
+        supabase = get_supabase_client()
+
+        # Get job data
+        job_response = supabase.table("jobs").select("*").eq("id", job_id).eq("is_active", True).single().execute()
+        if not job_response.data:
+            logger.warning(f"Job {job_id} not found or not active")
+            return 0
+
+        job = job_response.data
+
+        # Get all teachers
+        teachers_response = supabase.table("teachers").select("*").execute()
+        teachers = teachers_response.data or []
+
+        logger.info(f"Running matching for job {job_id} against {len(teachers)} teachers")
+
+        match_count = 0
+        for teacher in teachers:
+            score, reasons = MatchingService.calculate_job_match_score(teacher, job)
+
+            if score >= min_score:
+                match_data = {
+                    "teacher_id": teacher["id"],
+                    "job_id": job_id,
+                    "school_id": None,  # Jobs don't have school_id
+                    "match_score": score,
+                    "match_reasons": reasons,
+                }
+
+                # Check if match already exists for this teacher-job pair
+                existing = supabase.table("teacher_school_matches").select("id").eq(
+                    "teacher_id", teacher["id"]
+                ).eq("job_id", job_id).execute()
+
+                if existing.data:
+                    # Update existing
+                    supabase.table("teacher_school_matches").update({
+                        "match_score": score,
+                        "match_reasons": reasons,
+                    }).eq("id", existing.data[0]["id"]).execute()
+                else:
+                    # Insert new
+                    supabase.table("teacher_school_matches").insert(match_data).execute()
+
+                match_count += 1
+            else:
+                # Remove match if score dropped below threshold
+                supabase.table("teacher_school_matches").delete().eq(
+                    "teacher_id", teacher["id"]
+                ).eq("job_id", job_id).execute()
+
+        logger.info(f"Found {match_count} matches for job {job_id}")
+        return match_count
+
+    @staticmethod
+    def get_teacher_all_matches(teacher_id: int, limit: int = 50) -> List[Dict]:
+        """
+        Get all matches for a teacher (both school and job matches).
+        Returns combined list sorted by match score.
+        """
+        supabase = get_supabase_client()
+
+        # Get all matches (both school and job)
+        response = supabase.table("teacher_school_matches").select(
+            "*, schools(city, province, school_type, age_groups, salary_range), "
+            "jobs(city, province, school_type, age_groups, salary, title, company, "
+            "application_deadline, start_date, visa_sponsorship, accommodation_provided, "
+            "external_url, source)"
+        ).eq("teacher_id", teacher_id).order("match_score", desc=True).limit(limit).execute()
+
+        matches = response.data or []
+
+        # Transform to unified format
+        unified_matches = []
+        for match in matches:
+            school_data = match.get("schools")
+            job_data = match.get("jobs")
+
+            if school_data:
+                # School match
+                unified_matches.append({
+                    "id": match["id"],
+                    "type": "school",
+                    "city": school_data.get("city"),
+                    "province": school_data.get("province"),
+                    "school_type": school_data.get("school_type"),
+                    "age_groups": school_data.get("age_groups", []),
+                    "salary_range": school_data.get("salary_range"),
+                    "match_score": match["match_score"],
+                    "match_reasons": match["match_reasons"],
+                    "is_submitted": match.get("is_submitted", False),
+                    "role_name": match.get("role_name"),
+                    # School-specific (null for jobs)
+                    "school_id": match.get("school_id"),
+                    "job_id": None,
+                    # Job-specific fields (null for schools)
+                    "title": None,
+                    "company": None,
+                    "application_deadline": None,
+                    "start_date": None,
+                    "visa_sponsorship": None,
+                    "accommodation_provided": None,
+                    "external_url": None,
+                    "source": "manual",
+                })
+            elif job_data:
+                # Job match
+                unified_matches.append({
+                    "id": match["id"],
+                    "type": "job",
+                    "city": job_data.get("city"),
+                    "province": job_data.get("province"),
+                    "school_type": job_data.get("school_type"),
+                    "age_groups": job_data.get("age_groups", []),
+                    "salary_range": job_data.get("salary"),  # Jobs use 'salary' not 'salary_range'
+                    "match_score": match["match_score"],
+                    "match_reasons": match["match_reasons"],
+                    "is_submitted": match.get("is_submitted", False),
+                    "role_name": match.get("role_name"),
+                    # School-specific (null for jobs)
+                    "school_id": None,
+                    "job_id": match.get("job_id"),
+                    # Job-specific fields
+                    "title": job_data.get("title"),
+                    "company": job_data.get("company"),
+                    "application_deadline": job_data.get("application_deadline"),
+                    "start_date": job_data.get("start_date"),
+                    "visa_sponsorship": job_data.get("visa_sponsorship"),
+                    "accommodation_provided": job_data.get("accommodation_provided"),
+                    "external_url": job_data.get("external_url"),
+                    "source": job_data.get("source", "tes"),
+                })
+
+        return unified_matches
+
+    @staticmethod
+    def run_matching_for_teacher_jobs(teacher_id: int, min_score: float = 50.0) -> int:
+        """
+        Run matching algorithm for a teacher against all active external jobs.
+        Saves results to teacher_school_matches table with job_id set.
+        Returns count of matches created.
+        """
+        supabase = get_supabase_client()
+
+        # Get teacher data
+        teacher_response = supabase.table("teachers").select("*").eq("id", teacher_id).single().execute()
+        if not teacher_response.data:
+            raise ValueError(f"Teacher {teacher_id} not found")
+
+        teacher = teacher_response.data
+
+        # Get all active external jobs (source != 'manual')
+        jobs_response = supabase.table("jobs").select("*").eq(
+            "is_active", True
+        ).neq("source", "manual").execute()
+        jobs = jobs_response.data or []
+
+        logger.info(f"Running job matching for teacher {teacher_id} against {len(jobs)} external jobs")
+
+        match_count = 0
+        for job in jobs:
+            score, reasons = MatchingService.calculate_job_match_score(teacher, job)
+
+            if score >= min_score:
+                match_data = {
+                    "teacher_id": teacher_id,
+                    "job_id": job["id"],
+                    "school_id": None,
+                    "match_score": score,
+                    "match_reasons": reasons,
+                }
+
+                # Check if match already exists
+                existing = supabase.table("teacher_school_matches").select("id").eq(
+                    "teacher_id", teacher_id
+                ).eq("job_id", job["id"]).execute()
+
+                if existing.data:
+                    # Update existing
+                    supabase.table("teacher_school_matches").update({
+                        "match_score": score,
+                        "match_reasons": reasons,
+                    }).eq("id", existing.data[0]["id"]).execute()
+                else:
+                    # Insert new
+                    supabase.table("teacher_school_matches").insert(match_data).execute()
+
+                match_count += 1
+
+        logger.info(f"Found {match_count} job matches for teacher {teacher_id}")
+        return match_count

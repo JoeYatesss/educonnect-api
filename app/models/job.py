@@ -25,6 +25,18 @@ class JobCreate(BaseModel):
     subjects: Optional[List[str]] = None
     is_active: bool = True
     is_new: bool = True
+    # Source tracking fields
+    source: Optional[str] = Field(default="manual", max_length=50)
+    external_id: Optional[str] = Field(None, max_length=255)
+    external_url: Optional[str] = None
+    scraped_at: Optional[datetime] = None
+    # TES-specific fields
+    application_deadline: Optional[datetime] = None
+    start_date: Optional[str] = Field(None, max_length=100)
+    visa_sponsorship: Optional[bool] = None
+    accommodation_provided: Optional[str] = Field(None, max_length=255)
+    school_type: Optional[str] = Field(None, max_length=50)
+    contract_term: Optional[str] = Field(None, max_length=50)
 
 
 class JobUpdate(BaseModel):
@@ -49,6 +61,18 @@ class JobUpdate(BaseModel):
     subjects: Optional[List[str]] = None
     is_active: Optional[bool] = None
     is_new: Optional[bool] = None
+    # Source tracking fields
+    source: Optional[str] = Field(None, max_length=50)
+    external_id: Optional[str] = Field(None, max_length=255)
+    external_url: Optional[str] = None
+    scraped_at: Optional[datetime] = None
+    # TES-specific fields
+    application_deadline: Optional[datetime] = None
+    start_date: Optional[str] = Field(None, max_length=100)
+    visa_sponsorship: Optional[bool] = None
+    accommodation_provided: Optional[str] = Field(None, max_length=255)
+    school_type: Optional[str] = Field(None, max_length=50)
+    contract_term: Optional[str] = Field(None, max_length=50)
 
 
 class JobResponse(BaseModel):
@@ -74,6 +98,19 @@ class JobResponse(BaseModel):
     subjects: Optional[List[str]]
     is_active: bool
     is_new: bool
+    # Source tracking fields
+    source: Optional[str] = "manual"
+    external_id: Optional[str] = None
+    external_url: Optional[str] = None
+    scraped_at: Optional[datetime] = None
+    # TES-specific fields
+    application_deadline: Optional[datetime] = None
+    start_date: Optional[str] = None
+    visa_sponsorship: Optional[bool] = None
+    accommodation_provided: Optional[str] = None
+    school_type: Optional[str] = None
+    contract_term: Optional[str] = None
+    # Timestamps
     created_at: datetime
     updated_at: datetime
 
