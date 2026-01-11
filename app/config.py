@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     # Email
     resend_api_key: str
+    team_email: str = "team@educonnectchina.com"
 
     # CORS
     allowed_origins: str = "http://localhost:3000"

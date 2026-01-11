@@ -2,7 +2,11 @@ from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel, EmailStr
 from app.db.supabase import get_supabase_client
 from app.middleware.rate_limit import limiter
+from app.services.email_service import EmailService
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
@@ -81,6 +85,20 @@ async def create_teacher_profile_signup(
         )
 
     teacher = response.data[0]
+
+    # Send notification email to team (don't fail signup if email fails)
+    try:
+        EmailService.send_teacher_signup_notification(
+            teacher_name=f"{data.first_name} {data.last_name}",
+            teacher_email=data.email,
+            preferred_location=data.preferred_location,
+            subject_specialty=data.subject_specialty,
+            preferred_age_group=data.preferred_age_group,
+            linkedin=data.linkedin
+        )
+        logger.info(f"Signup notification sent for teacher: {data.email}")
+    except Exception as e:
+        logger.error(f"Failed to send signup notification email: {str(e)}")
 
     return {
         "message": "Teacher profile created successfully",

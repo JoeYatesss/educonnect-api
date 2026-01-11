@@ -69,7 +69,7 @@ class EmailService:
 
         # Send email
         params = {
-            "from": "EduConnect <noreply@jjtechnologies.co.uk>",
+            "from": "EduConnect <team@educonnectchina.com>",
             "to": [to_email],
             "subject": f"Welcome to EduConnect! Payment Confirmed - {formatted_amount}",
             "html": html_content,
@@ -359,3 +359,132 @@ class EmailService:
         </body>
         </html>
         """
+
+    @staticmethod
+    def send_teacher_signup_notification(
+        teacher_name: str,
+        teacher_email: str,
+        preferred_location: str,
+        subject_specialty: str,
+        preferred_age_group: str,
+        linkedin: str = None
+    ) -> dict:
+        """
+        Send notification email to team when a new teacher signs up
+
+        Args:
+            teacher_name: Teacher's full name
+            teacher_email: Teacher's email address
+            preferred_location: Teacher's preferred city in China
+            subject_specialty: Teacher's subject specialty
+            preferred_age_group: Teacher's preferred age groups
+            linkedin: Optional LinkedIn profile URL
+
+        Returns:
+            dict: Response from Resend API
+        """
+        settings = get_settings()
+        resend.api_key = settings.resend_api_key
+
+        signup_time = datetime.now().strftime('%B %d, %Y at %I:%M %p UTC')
+
+        linkedin_section = ""
+        if linkedin:
+            linkedin_section = f"""
+            <tr>
+                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">LinkedIn:</td>
+                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                    <a href="{linkedin}" style="color: #EF4444; text-decoration: none;">{linkedin}</a>
+                </td>
+            </tr>
+            """
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F9FAFB;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">
+                        New Teacher Sign-Up
+                    </h1>
+                    <p style="color: rgba(255, 255, 255, 0.9); margin: 10px 0 0 0; font-size: 16px;">
+                        A new teacher has registered on EduConnect
+                    </p>
+                </div>
+
+                <!-- Teacher Details Section -->
+                <div style="padding: 40px 30px;">
+                    <div style="background-color: #F0FDF4; border-left: 4px solid #10B981; padding: 20px; margin-bottom: 30px;">
+                        <h2 style="color: #065F46; margin: 0 0 5px 0; font-size: 20px; font-weight: 600;">
+                            {teacher_name}
+                        </h2>
+                        <p style="color: #047857; margin: 0; font-size: 14px;">
+                            Registered on {signup_time}
+                        </p>
+                    </div>
+
+                    <div style="background-color: #F9FAFB; padding: 20px; border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Email:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                                    <a href="mailto:{teacher_email}" style="color: #EF4444; text-decoration: none;">{teacher_email}</a>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Preferred City:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                                    {preferred_location}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Subject Specialty:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                                    {subject_specialty}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Preferred Age Groups:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                                    {preferred_age_group}
+                                </td>
+                            </tr>
+                            {linkedin_section}
+                        </table>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="https://educonnectchina.com/admin/teachers"
+                           style="display: inline-block; background-color: #EF4444; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                            View in Admin Dashboard
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="padding: 20px 30px; text-align: center; background-color: #111827;">
+                    <p style="color: #6B7280; margin: 0; font-size: 12px;">
+                        This is an automated notification from EduConnect
+                    </p>
+                </div>
+
+            </div>
+        </body>
+        </html>
+        """
+
+        params = {
+            "from": "EduConnect <team@educonnectchina.com>",
+            "to": [settings.team_email],
+            "subject": f"New Teacher Sign-Up: {teacher_name}",
+            "html": html_content,
+        }
+
+        return resend.Emails.send(params)
