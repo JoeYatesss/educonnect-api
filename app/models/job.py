@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Any
 from datetime import datetime
+import json
 
 
 class JobCreate(BaseModel):
@@ -134,6 +135,21 @@ class JobResponse(BaseModel):
     # Timestamps
     created_at: datetime
     updated_at: datetime
+
+    @field_validator('school_address', mode='before')
+    @classmethod
+    def parse_school_address(cls, v: Any) -> Optional[dict]:
+        """Parse school_address from JSON string if needed"""
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return None
+        return None
 
     class Config:
         from_attributes = True
