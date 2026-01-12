@@ -17,5 +17,5 @@ COPY ./app /code/app
 # Expose port
 EXPOSE 8000
 
-# Run application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run application (--proxy-headers ensures HTTPS redirects work behind Railway's proxy)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
