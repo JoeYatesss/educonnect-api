@@ -168,3 +168,65 @@ class StorageService:
     def get_teacher_headshot_url(teacher_id: int, photo_path: str) -> str:
         """Get signed URL for teacher headshot (1 hour expiry)"""
         return StorageService.get_signed_url(StorageService.BUCKET_PHOTOS, photo_path, 3600)
+
+    @staticmethod
+    def create_signed_upload_url(bucket_name: str, file_path: str, expires_in: int = 300) -> dict:
+        """
+        Create a signed URL for uploading a file directly to storage.
+        This allows uploads without requiring JWT authentication.
+
+        Args:
+            bucket_name: The storage bucket name
+            file_path: The path where the file will be stored
+            expires_in: Seconds until URL expires (default 5 minutes)
+
+        Returns:
+            dict with 'signedUrl' and 'path' keys
+        """
+        supabase = get_supabase_client()
+        response = supabase.storage.from_(bucket_name).create_signed_upload_url(file_path)
+        return {
+            "signedUrl": response.get("signedUrl", ""),
+            "path": response.get("path", file_path),
+            "token": response.get("token", "")
+        }
+
+    @staticmethod
+    def generate_signup_upload_urls(teacher_id: int, cv_extension: str, headshot_extension: str, video_extension: str) -> dict:
+        """
+        Generate presigned upload URLs for all signup files.
+
+        Args:
+            teacher_id: The teacher's database ID
+            cv_extension: File extension for CV (e.g., 'pdf', 'docx')
+            headshot_extension: File extension for headshot (e.g., 'jpg', 'png')
+            video_extension: File extension for video (e.g., 'mp4', 'mov')
+
+        Returns:
+            dict with bucket names, paths, and tokens for cv, headshot, and video
+        """
+        cv_path = f"{teacher_id}/cv.{cv_extension}"
+        headshot_path = f"{teacher_id}/headshot.{headshot_extension}"
+        video_path = f"{teacher_id}/intro.{video_extension}"
+
+        cv_upload = StorageService.create_signed_upload_url(StorageService.BUCKET_CVS, cv_path)
+        headshot_upload = StorageService.create_signed_upload_url(StorageService.BUCKET_PHOTOS, headshot_path)
+        video_upload = StorageService.create_signed_upload_url(StorageService.BUCKET_VIDEOS, video_path)
+
+        return {
+            "cv": {
+                "bucket": StorageService.BUCKET_CVS,
+                "path": cv_path,
+                "token": cv_upload["token"]
+            },
+            "headshot": {
+                "bucket": StorageService.BUCKET_PHOTOS,
+                "path": headshot_path,
+                "token": headshot_upload["token"]
+            },
+            "video": {
+                "bucket": StorageService.BUCKET_VIDEOS,
+                "path": video_path,
+                "token": video_upload["token"]
+            }
+        }
