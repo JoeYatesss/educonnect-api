@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str
 
     # Stripe
-    stripe_secret_key: str
-    stripe_webhook_secret: str
+    stripe_secret_key: str = ""  # Required for payments
+    stripe_webhook_secret: str = ""
     # Stripe Price IDs (different for test vs live mode)
     stripe_price_id_gbp: str = ""  # Required in production
     stripe_price_id_eur: str = ""  # Required in production

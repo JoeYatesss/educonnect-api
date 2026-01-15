@@ -488,3 +488,488 @@ class EmailService:
         }
 
         return resend.Emails.send(params)
+
+    @staticmethod
+    def send_school_signup_notification(
+        school_name: str,
+        city: str,
+        contact_email: str,
+        wechat_id: str = None,
+        recruitment_volume: str = None
+    ) -> dict:
+        """
+        Send notification email to team when a new school signs up
+
+        Args:
+            school_name: Name of the school
+            city: School's city
+            contact_email: Contact email for the school
+            wechat_id: Optional WeChat ID
+            recruitment_volume: How many teachers they recruit annually
+
+        Returns:
+            dict: Response from Resend API
+        """
+        settings = get_settings()
+        resend.api_key = settings.resend_api_key
+
+        signup_time = datetime.now().strftime('%B %d, %Y at %I:%M %p UTC')
+
+        wechat_section = ""
+        if wechat_id:
+            wechat_section = f"""
+            <tr>
+                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">WeChat ID:</td>
+                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                    {wechat_id}
+                </td>
+            </tr>
+            """
+
+        recruitment_section = ""
+        if recruitment_volume:
+            recruitment_section = f"""
+            <tr>
+                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Annual Recruitment:</td>
+                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                    {recruitment_volume} teachers/year
+                </td>
+            </tr>
+            """
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F9FAFB;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">
+                        New School Sign-Up
+                    </h1>
+                    <p style="color: rgba(255, 255, 255, 0.9); margin: 10px 0 0 0; font-size: 16px;">
+                        A new school has registered on EduConnect
+                    </p>
+                </div>
+
+                <!-- School Details Section -->
+                <div style="padding: 40px 30px;">
+                    <div style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 20px; margin-bottom: 30px;">
+                        <h2 style="color: #1E40AF; margin: 0 0 5px 0; font-size: 20px; font-weight: 600;">
+                            {school_name}
+                        </h2>
+                        <p style="color: #1D4ED8; margin: 0; font-size: 14px;">
+                            Registered on {signup_time}
+                        </p>
+                    </div>
+
+                    <div style="background-color: #F9FAFB; padding: 20px; border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">City:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                                    {city}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Contact Email:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                                    <a href="mailto:{contact_email}" style="color: #3B82F6; text-decoration: none;">{contact_email}</a>
+                                </td>
+                            </tr>
+                            {wechat_section}
+                            {recruitment_section}
+                        </table>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="https://educonnectchina.com/admin"
+                           style="display: inline-block; background-color: #3B82F6; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                            View in Admin Dashboard
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="padding: 20px 30px; text-align: center; background-color: #111827;">
+                    <p style="color: #6B7280; margin: 0; font-size: 12px;">
+                        This is an automated notification from EduConnect
+                    </p>
+                </div>
+
+            </div>
+        </body>
+        </html>
+        """
+
+        params = {
+            "from": "EduConnect <team@educonnectchina.com>",
+            "to": [settings.team_email],
+            "subject": f"New School Sign-Up: {school_name} ({city})",
+            "html": html_content,
+        }
+
+        return resend.Emails.send(params)
+
+    @staticmethod
+    def send_school_payment_confirmation(
+        to_email: str,
+        school_name: str,
+        amount: int,
+        currency: str
+    ) -> dict:
+        """
+        Send payment confirmation email to school
+
+        Args:
+            to_email: School's contact email
+            school_name: Name of the school
+            amount: Payment amount in minor units
+            currency: Currency code
+
+        Returns:
+            dict: Response from Resend API
+        """
+        settings = get_settings()
+        resend.api_key = settings.resend_api_key
+
+        # Format amount with CNY support
+        if currency.upper() == 'CNY':
+            formatted_amount = f"¥{amount / 100:,.2f}"
+        else:
+            formatted_amount = EmailService.format_currency(amount, currency)
+
+        payment_date = datetime.now().strftime('%B %d, %Y')
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F9FAFB;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">
+                        Payment Confirmed!
+                    </h1>
+                    <p style="color: rgba(255, 255, 255, 0.9); margin: 10px 0 0 0; font-size: 16px;">
+                        Welcome to EduConnect Schools
+                    </p>
+                </div>
+
+                <!-- Payment Confirmation Section -->
+                <div style="padding: 40px 30px; border-bottom: 1px solid #E5E7EB;">
+                    <div style="background-color: #F0FDF4; border-left: 4px solid #10B981; padding: 20px; margin-bottom: 30px;">
+                        <h2 style="color: #065F46; margin: 0 0 10px 0; font-size: 18px; font-weight: 600;">
+                            Payment Successful
+                        </h2>
+                        <p style="color: #047857; margin: 0; font-size: 14px;">
+                            Your payment of {formatted_amount} has been processed.
+                        </p>
+                    </div>
+
+                    <div style="background-color: #F9FAFB; padding: 20px; border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px;">School:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right;">
+                                    {school_name}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px;">Amount Paid:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right;">
+                                    {formatted_amount}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px;">Payment Date:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right;">
+                                    {payment_date}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- What's Unlocked Section -->
+                <div style="padding: 40px 30px; background-color: #F9FAFB;">
+                    <h2 style="color: #111827; margin: 0 0 20px 0; font-size: 22px; font-weight: 600;">
+                        You Now Have Access To:
+                    </h2>
+
+                    <div style="margin-bottom: 12px;">
+                        <table style="width: 100%;">
+                            <tr>
+                                <td style="width: 30px; vertical-align: top; padding-right: 10px;">
+                                    <span style="color: #10B981; font-size: 20px;">✓</span>
+                                </td>
+                                <td style="vertical-align: top;">
+                                    <p style="color: #374151; margin: 0; font-size: 14px;">
+                                        <strong>Complete Teacher Profiles</strong> - Full names, photos, and contact details
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <table style="width: 100%;">
+                            <tr>
+                                <td style="width: 30px; vertical-align: top; padding-right: 10px;">
+                                    <span style="color: #10B981; font-size: 20px;">✓</span>
+                                </td>
+                                <td style="vertical-align: top;">
+                                    <p style="color: #374151; margin: 0; font-size: 14px;">
+                                        <strong>Downloadable CVs</strong> - Access teacher resumes and qualifications
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <table style="width: 100%;">
+                            <tr>
+                                <td style="width: 30px; vertical-align: top; padding-right: 10px;">
+                                    <span style="color: #10B981; font-size: 20px;">✓</span>
+                                </td>
+                                <td style="vertical-align: top;">
+                                    <p style="color: #374151; margin: 0; font-size: 14px;">
+                                        <strong>Introduction Videos</strong> - Watch teacher introduction videos
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <table style="width: 100%;">
+                            <tr>
+                                <td style="width: 30px; vertical-align: top; padding-right: 10px;">
+                                    <span style="color: #10B981; font-size: 20px;">✓</span>
+                                </td>
+                                <td style="vertical-align: top;">
+                                    <p style="color: #374151; margin: 0; font-size: 14px;">
+                                        <strong>Smart Matching</strong> - AI-powered teacher recommendations for your school
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="https://educonnectchina.com/school-dashboard/find-talent"
+                           style="display: inline-block; background-color: #3B82F6; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                            Start Finding Teachers
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="padding: 30px; text-align: center; background-color: #111827;">
+                    <p style="color: #9CA3AF; margin: 0 0 10px 0; font-size: 14px;">
+                        Need help? Contact us at
+                        <a href="mailto:team@educonnectchina.com" style="color: #3B82F6; text-decoration: none;">
+                            team@educonnectchina.com
+                        </a>
+                    </p>
+                    <p style="color: #6B7280; margin: 0; font-size: 12px;">
+                        © 2026 EduConnect. All rights reserved.
+                    </p>
+                </div>
+
+            </div>
+        </body>
+        </html>
+        """
+
+        params = {
+            "from": "EduConnect <team@educonnectchina.com>",
+            "to": [to_email],
+            "subject": f"Payment Confirmed - Welcome to EduConnect Schools!",
+            "html": html_content,
+        }
+
+        return resend.Emails.send(params)
+
+    @staticmethod
+    def send_manual_payment_request(
+        school_name: str,
+        contact_email: str,
+        contact_name: str = None,
+        city: str = None,
+        company_name: str = None,
+        billing_address: str = None,
+        additional_notes: str = None
+    ) -> dict:
+        """
+        Send notification to team when a school requests manual payment
+
+        Args:
+            school_name: Name of the school
+            contact_email: School's contact email
+            contact_name: Optional contact person name
+            city: School's city
+            company_name: Company/organization name for invoice
+            billing_address: Billing address for invoice
+            additional_notes: Any additional notes from the school
+
+        Returns:
+            dict: Response from Resend API
+        """
+        settings = get_settings()
+        resend.api_key = settings.resend_api_key
+
+        request_time = datetime.now().strftime('%B %d, %Y at %I:%M %p UTC')
+
+        contact_name_section = ""
+        if contact_name:
+            contact_name_section = f"""
+            <tr>
+                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Contact Name:</td>
+                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                    {contact_name}
+                </td>
+            </tr>
+            """
+
+        city_section = ""
+        if city:
+            city_section = f"""
+            <tr>
+                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">City:</td>
+                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                    {city}
+                </td>
+            </tr>
+            """
+
+        company_name_section = ""
+        if company_name:
+            company_name_section = f"""
+            <tr>
+                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Invoice Company:</td>
+                <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                    {company_name}
+                </td>
+            </tr>
+            """
+
+        billing_address_section = ""
+        if billing_address:
+            billing_address_section = f"""
+            <tr>
+                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB; vertical-align: top;">Billing Address:</td>
+                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                    {billing_address.replace(chr(10), '<br>')}
+                </td>
+            </tr>
+            """
+
+        notes_section = ""
+        if additional_notes:
+            notes_section = f"""
+            <tr>
+                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB; vertical-align: top;">Notes:</td>
+                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                    {additional_notes}
+                </td>
+            </tr>
+            """
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F9FAFB;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); padding: 40px 30px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700;">
+                        Manual Payment Request
+                    </h1>
+                    <p style="color: rgba(255, 255, 255, 0.9); margin: 10px 0 0 0; font-size: 16px;">
+                        A school has requested invoice/bank transfer payment
+                    </p>
+                </div>
+
+                <!-- Details Section -->
+                <div style="padding: 40px 30px;">
+                    <div style="background-color: #FFFBEB; border-left: 4px solid #F59E0B; padding: 20px; margin-bottom: 30px;">
+                        <h2 style="color: #92400E; margin: 0 0 5px 0; font-size: 20px; font-weight: 600;">
+                            {school_name}
+                        </h2>
+                        <p style="color: #B45309; margin: 0; font-size: 14px;">
+                            Requested on {request_time}
+                        </p>
+                    </div>
+
+                    <div style="background-color: #F9FAFB; padding: 20px; border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">School:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                                    {school_name}
+                                </td>
+                            </tr>
+                            {contact_name_section}
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px; border-bottom: 1px solid #E5E7EB;">Contact Email:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; text-align: right; border-bottom: 1px solid #E5E7EB;">
+                                    <a href="mailto:{contact_email}" style="color: #F59E0B; text-decoration: none;">{contact_email}</a>
+                                </td>
+                            </tr>
+                            {city_section}
+                            {company_name_section}
+                            {billing_address_section}
+                            {notes_section}
+                            <tr>
+                                <td style="padding: 10px 0; color: #6B7280; font-size: 14px;">Amount:</td>
+                                <td style="padding: 10px 0; color: #111827; font-size: 14px; font-weight: 600; text-align: right;">
+                                    ¥7,500 CNY
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div style="background-color: #FEF3C7; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                        <p style="color: #92400E; margin: 0; font-size: 14px;">
+                            <strong>Action Required:</strong> Generate an invoice for this school and send it to their email. Once payment is received, approve the request in the admin panel to grant them access.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="padding: 20px 30px; text-align: center; background-color: #111827;">
+                    <p style="color: #6B7280; margin: 0; font-size: 12px;">
+                        This is an automated notification from EduConnect
+                    </p>
+                </div>
+
+            </div>
+        </body>
+        </html>
+        """
+
+        params = {
+            "from": "EduConnect <team@educonnectchina.com>",
+            "to": [settings.team_email],
+            "subject": f"Manual Payment Request: {school_name}",
+            "html": html_content,
+        }
+
+        return resend.Emails.send(params)

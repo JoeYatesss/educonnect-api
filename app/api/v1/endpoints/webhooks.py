@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Request, HTTPException, status
 from app.services.stripe_service import StripeService
+from app.services.school_stripe_service import SchoolStripeService
 import stripe
+import logging
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -10,7 +13,7 @@ router = APIRouter()
 async def stripe_webhook(request: Request):
     """
     Handle Stripe webhook events
-    Verifies webhook signature and processes events
+    Verifies webhook signature and processes events for both teachers and schools
     """
     payload = await request.body()
     sig_header = request.headers.get("stripe-signature")
@@ -39,9 +42,19 @@ async def stripe_webhook(request: Request):
     # Handle the event
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
+        metadata = session.get("metadata", {})
+
         try:
-            StripeService.handle_checkout_completed(session)
+            # Check if this is a school payment
+            if metadata.get("type") == "school":
+                logger.info(f"Processing school payment webhook for session: {session.get('id')}")
+                SchoolStripeService.handle_school_checkout_completed(session)
+            else:
+                # Default to teacher payment
+                logger.info(f"Processing teacher payment webhook for session: {session.get('id')}")
+                StripeService.handle_checkout_completed(session)
         except Exception as e:
+            logger.error(f"Failed to process checkout webhook: {e}")
             # Return 500 so Stripe retries the webhook
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -49,6 +62,7 @@ async def stripe_webhook(request: Request):
             )
     elif event["type"] == "payment_intent.payment_failed":
         # Log failed payment - handled internally
+        logger.warning(f"Payment failed: {event['data']['object'].get('id')}")
         pass
 
     return {"status": "success"}
