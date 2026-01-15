@@ -140,3 +140,45 @@ async def require_payment(
         )
 
     return teacher
+
+
+async def get_current_school_account(
+    current_user: dict = Depends(get_current_user)
+) -> dict:
+    """
+    Get current school account
+    Raises 403 if user is not a school
+    """
+    supabase = get_supabase_client()
+
+    response = supabase.table("school_accounts").select("*").eq("user_id", current_user["id"]).single().execute()
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized as school"
+        )
+
+    if not response.data.get("is_active"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="School account is inactive"
+        )
+
+    return response.data
+
+
+async def require_school_payment(
+    school: dict = Depends(get_current_school_account)
+) -> dict:
+    """
+    Ensure school has paid
+    Raises 402 if payment is required
+    """
+    if not school.get("has_paid"):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Payment required to access full teacher profiles"
+        )
+
+    return school

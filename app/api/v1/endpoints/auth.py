@@ -40,7 +40,7 @@ async def get_current_user_profile(
 ):
     """
     Get current user's profile and role.
-    Returns user info with teacher/admin profile if they exist.
+    Returns user info with teacher/admin/school profile if they exist.
     Used by middleware for route protection and role checking.
     """
     supabase = get_supabase_client()
@@ -49,7 +49,8 @@ async def get_current_user_profile(
         "user": current_user,
         "teacher": None,
         "admin": None,
-        "role": None,  # Will be 'teacher', 'admin', or None
+        "school": None,
+        "role": None,  # Will be 'teacher', 'admin', 'school', or None
     }
 
     # Try to get teacher profile
@@ -74,6 +75,16 @@ async def get_current_user_profile(
                 result["role"] = "admin"
         except Exception:
             pass  # User is not an admin
+
+    # Try to get school profile (only if not a teacher or admin)
+    if not result["teacher"] and not result["admin"]:
+        try:
+            school_response = supabase.table("school_accounts").select("*").eq("user_id", current_user["id"]).single().execute()
+            if school_response.data:
+                result["school"] = school_response.data
+                result["role"] = "school"
+        except Exception:
+            pass  # User is not a school
 
     return result
 
