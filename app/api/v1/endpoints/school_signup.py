@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, status, Request
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from app.db.supabase import get_supabase_client
 from app.middleware.rate_limit import limiter
+from app.services.email_service import EmailService
 from typing import Optional
 import logging
 
@@ -13,18 +14,16 @@ router = APIRouter()
 class SchoolSignupRequest(BaseModel):
     """School account creation during signup - no auth required"""
     user_id: str  # Supabase auth user ID
-    school_name: str
-    city: str
-    contact_name: str
+    school_name: str = Field(..., min_length=1, max_length=255)
+    city: str = Field(..., min_length=1, max_length=100)
     contact_email: EmailStr
-    contact_phone: Optional[str] = None
-    wechat_id: Optional[str] = None
-    annual_recruitment_volume: Optional[str] = None
+    wechat_id: Optional[str] = Field(None, max_length=100)
+    annual_recruitment_volume: Optional[str] = None  # "1-5", "6-10", "11-20", "20+"
 
 
 @router.post("/create-school-account", status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/hour")
-async def create_school_account(
+async def create_school_account_signup(
     request: Request,
     data: SchoolSignupRequest
 ):
@@ -33,7 +32,7 @@ async def create_school_account(
 
     This endpoint is called immediately after Supabase auth signup,
     before email verification. It verifies the user exists in Supabase auth
-    before creating the account.
+    before creating the school account.
     """
     supabase = get_supabase_client()
 
@@ -53,30 +52,35 @@ async def create_school_account(
             detail=f"Invalid user ID: {str(e)}"
         )
 
-    # Check if school account already exists
+    # Check if school account already exists for this user
     existing = supabase.table("school_accounts").select("id").eq("user_id", data.user_id).execute()
     if existing.data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="School account already exists"
+            detail="School account already exists for this user"
+        )
+
+    # Check if this user already has a teacher profile (can't be both)
+    existing_teacher = supabase.table("teachers").select("id").eq("user_id", data.user_id).execute()
+    if existing_teacher.data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account is registered as a teacher. Please use a different email for school registration."
         )
 
     # Create school account
-    account_data = {
+    school_data = {
         "user_id": data.user_id,
         "school_name": data.school_name,
         "city": data.city,
-        "contact_name": data.contact_name,
         "contact_email": data.contact_email,
-        "contact_phone": data.contact_phone,
         "wechat_id": data.wechat_id,
         "annual_recruitment_volume": data.annual_recruitment_volume,
         "status": "pending",
-        "has_paid": False,
         "is_active": True,
     }
 
-    response = supabase.table("school_accounts").insert(account_data).execute()
+    response = supabase.table("school_accounts").insert(school_data).execute()
 
     if not response.data:
         raise HTTPException(
@@ -84,11 +88,22 @@ async def create_school_account(
             detail="Failed to create school account"
         )
 
-    account = response.data[0]
+    school = response.data[0]
 
-    logger.info(f"School account created: {data.school_name} ({data.contact_email})")
+    # Send notification email to team (don't fail signup if email fails)
+    try:
+        EmailService.send_school_signup_notification(
+            school_name=data.school_name,
+            city=data.city,
+            contact_email=data.contact_email,
+            wechat_id=data.wechat_id,
+            recruitment_volume=data.annual_recruitment_volume
+        )
+        logger.info(f"School signup notification sent for: {data.school_name}")
+    except Exception as e:
+        logger.error(f"Failed to send school signup notification email: {str(e)}")
 
     return {
         "message": "School account created successfully",
-        "school_account": account
+        "school": school
     }
