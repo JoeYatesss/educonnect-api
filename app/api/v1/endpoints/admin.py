@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from app.dependencies import get_current_admin
 from app.db.supabase import get_supabase_client
 from app.services.storage_service import StorageService
+from typing import Optional
+from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,11 +38,11 @@ async def get_admin_stats(
         placed_response = supabase.table("teacher_school_applications").select("id", count="exact").eq("status", "placed").execute()
         placed_teachers = placed_response.count or 0
 
-        # Get total schools count
+        # Get total schools count (from schools table)
         schools_response = supabase.table("schools").select("id", count="exact").execute()
         total_schools = schools_response.count or 0
 
-        # Get total jobs count
+        # Get total jobs count (from jobs table)
         jobs_response = supabase.table("jobs").select("id", count="exact").execute()
         total_jobs = jobs_response.count or 0
 

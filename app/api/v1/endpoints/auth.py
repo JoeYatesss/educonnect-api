@@ -63,18 +63,29 @@ async def get_current_user_profile(
             teacher_response.data["profile_completeness"] = TeacherResponse.calculate_profile_completeness(teacher_response.data)
             result["teacher"] = teacher_response.data
             result["role"] = "teacher"
+            return result
     except Exception:
         pass  # User is not a teacher
 
-    # Try to get admin profile (only if not a teacher)
-    if not result["teacher"]:
-        try:
-            admin_response = supabase.table("admin_users").select("*").eq("id", current_user["id"]).single().execute()
-            if admin_response.data:
-                result["admin"] = admin_response.data
-                result["role"] = "admin"
-        except Exception:
-            pass  # User is not an admin
+    # Try to get admin profile
+    try:
+        admin_response = supabase.table("admin_users").select("*").eq("id", current_user["id"]).single().execute()
+        if admin_response.data:
+            result["admin"] = admin_response.data
+            result["role"] = "admin"
+            return result
+    except Exception:
+        pass  # User is not an admin
+
+    # Try to get school account
+    try:
+        school_response = supabase.table("school_accounts").select("*").eq("user_id", current_user["id"]).single().execute()
+        if school_response.data:
+            result["school"] = school_response.data
+            result["role"] = "school"
+            return result
+    except Exception:
+        pass  # User is not a school account
 
     # Try to get school profile (only if not a teacher or admin)
     if not result["teacher"] and not result["admin"]:

@@ -10,6 +10,7 @@ api_router = APIRouter()
 
 # Teacher/General routes
 api_router.include_router(signup.router, prefix="/signup", tags=["signup"])
+api_router.include_router(school_signup.router, prefix="/school-signup", tags=["school-signup"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(teachers.router, prefix="/teachers", tags=["teachers"])
 api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
